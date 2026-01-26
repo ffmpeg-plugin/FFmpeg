@@ -390,6 +390,7 @@ extern const FFFilter ff_vf_normalize;
 extern const FFFilter ff_vf_null;
 extern const FFFilter ff_vf_ocr;
 extern const FFFilter ff_vf_ocv;
+extern const FFFilter ff_vf_oc_plugin;
 extern const FFFilter ff_vf_oscilloscope;
 extern const FFFilter ff_vf_overlay;
 extern const FFFilter ff_vf_overlay_opencl;
