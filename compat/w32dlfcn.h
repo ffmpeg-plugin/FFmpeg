@@ -36,7 +36,7 @@ static inline wchar_t *get_module_filename(HMODULE module)
 
     do {
         path_size = path_size ? FFMIN(2 * path_size, INT16_MAX + 1) : MAX_PATH;
-        new_path = av_realloc_array(path, path_size, sizeof *path);
+        new_path = (wchar_t *)av_realloc_array(path, path_size, sizeof *path);
         if (!new_path) {
             av_free(path);
             return NULL;
@@ -85,7 +85,7 @@ static inline HMODULE win32_dlopen(const char *name)
             goto exit;
         pathlen = new_path - path;
         pathsize = pathlen + namelen + 2;
-        new_path = av_realloc_array(path, pathsize, sizeof *path);
+        new_path = (wchar_t *)av_realloc_array(path, pathsize, sizeof *path);
         if (!new_path)
             goto exit;
         path = new_path;
@@ -101,7 +101,7 @@ static inline HMODULE win32_dlopen(const char *name)
             // 2. system directory even without the module name.
             if (pathlen + namelen + 2 > pathsize) {
                 pathsize = pathlen + namelen + 2;
-                new_path = av_realloc_array(path, pathsize, sizeof *path);
+                new_path = (wchar_t *)av_realloc_array(path, pathsize, sizeof *path);
                 if (!new_path)
                     goto exit;
                 path = new_path;
@@ -141,9 +141,9 @@ exit:
     av_free(name_w);
     return module;
 }
-#define dlopen(name, flags) win32_dlopen(name)
-#define dlclose FreeLibrary
-#define dlsym GetProcAddress
+#define dlopen(name, flags) ((void*)win32_dlopen(name))
+#define dlclose(handle) FreeLibrary((HMODULE)(handle))
+#define dlsym(handle, name) ((void*)GetProcAddress((HMODULE)(handle), name))
 #else
 #include <dlfcn.h>
 #endif
