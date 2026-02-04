@@ -625,7 +625,9 @@ private:
 
         dl_handle_ = dlopen(plugin_path, RTLD_NOW | RTLD_LOCAL);
         if (!dl_handle_) {
-            av_log(ctx_, AV_LOG_ERROR, "Failed to load plugin '%s'\n", plugin_path);
+            const char *err = dlerror();
+            av_log(ctx_, AV_LOG_ERROR, "Failed to load plugin '%s': %s\n",
+                   plugin_path, err ? err : "unknown error");
             return AVERROR(EINVAL);
         }
 
