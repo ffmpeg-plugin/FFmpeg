@@ -141,9 +141,43 @@ exit:
     av_free(name_w);
     return module;
 }
+/**
+ * Thread-safe dlerror implementation for Windows.
+ * Uses thread-local storage to store the error message.
+ * The returned string is valid until the next call to dlerror() on the same thread.
+ */
+static inline const char *win32_dlerror(void)
+{
+    static __declspec(thread) char error_msg[512];
+    DWORD error = GetLastError();
+
+    if (error == 0) {
+        error_msg[0] = '\0';
+        return NULL;
+    }
+
+    DWORD len = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), error_msg,
+        sizeof(error_msg) - 1, NULL);
+
+    if (len == 0) {
+        snprintf(error_msg, sizeof(error_msg), "Unknown error %lu", error);
+    } else {
+        /* Remove trailing newline characters */
+        while (len > 0 && (error_msg[len - 1] == '\n' || error_msg[len - 1] == '\r'))
+            error_msg[--len] = '\0';
+    }
+
+    /* Clear the error after retrieving */
+    SetLastError(0);
+
+    return error_msg;
+}
+
 #define dlopen(name, flags) ((void*)win32_dlopen(name))
 #define dlclose(handle) FreeLibrary((HMODULE)(handle))
 #define dlsym(handle, name) ((void*)GetProcAddress((HMODULE)(handle), name))
+#define dlerror() win32_dlerror()
 #else
 #include <dlfcn.h>
 #endif
