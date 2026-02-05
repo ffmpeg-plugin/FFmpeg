@@ -24,6 +24,7 @@
 #define AVFILTER_QUINK_OC_PLUGIN_H
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/cuda.hpp>
 #include <vector>
 #include <string>
 
@@ -43,9 +44,10 @@
  *   - DETECT plugin:  Inherits QuinkOCDetectPlugin, analyzes frames for detection
  */
 enum QuinkOCCapability {
-    QUINK_OC_CAP_NONE      = 0,        ///< No special capabilities (invalid)
-    QUINK_OC_CAP_PROCESS   = 1 << 0,   ///< Process plugin: transforms frames
-    QUINK_OC_CAP_DETECT    = 1 << 1,   ///< Detect plugin: analyzes frames for detection
+    QUINK_OC_CAP_NONE        = 0,        ///< No special capabilities (invalid)
+    QUINK_OC_CAP_PROCESS     = 1 << 0,   ///< Process plugin: transforms frames (CPU cv::Mat)
+    QUINK_OC_CAP_DETECT      = 1 << 1,   ///< Detect plugin: analyzes frames for detection
+    QUINK_OC_CAP_CUDA_PROCESS = 1 << 2,  ///< CUDA Process plugin: transforms frames (cv::cuda::GpuMat)
 };
 
 /**
@@ -58,10 +60,23 @@ enum QuinkOCCapability {
  * Use filter chains to achieve complex routing if needed.
  */
 
+enum QuinkPixelFormat {
+    QUINK_PIX_FMT_NONE = -1,
+    QUINK_PIX_FMT_BGR = 0,
+    QUINK_PIX_FMT_BGRA = 1,
+    QUINK_PIX_FMT_NV12 = 2,     // Semi-Planar YUV [Y plane followed by interleaved UV plane]
+    QUINK_PIX_FMT_P016 = 3,     // 16 bit Semi-Planar YUV [Y plane followed by interleaved UV plane].
+};
+
 struct QuinkOCFrameConfig {
-    int width;
-    int height;
-    int cv_type;     ///< OpenCV type (e.g., CV_8UC3), ignored for output
+    int width = 0;
+    int height = 0;
+    int cv_type = 0;
+    QuinkPixelFormat pix_fmt = QUINK_PIX_FMT_NONE;
+    // ISO/IEC 23091-2_2019 subclause 8.3
+    int colorspace = 0;
+    // Indicate whether NV12/P016 is limited range. BGR/BGRA is always full range
+    bool limited_range = false;
 };
 
 enum QuinkOCProcessResult {
@@ -217,6 +232,86 @@ public:
 };
 
 /*===========================================================================
+ * CUDA Process Plugin Class
+ *
+ * For plugins that transform video frames using CUDA.
+ * Works with AV_PIX_FMT_CUDA frames for zero-copy GPU processing.
+ * Inherit from this class and implement process(), flush(), configure().
+ *
+ * Supported I/O modes:
+ *   - 1:1 (single-input, single-output)
+ *   - N:1 (multi-input, single-output) - compositing, blending
+ *   - 1:N (single-input, multi-output) - splitting
+ *
+ * Data flow:
+ *   inputs --> process() --> QUINK_OC_OK:        outputs ready
+ *                        --> QUINK_OC_TRY_AGAIN: buffered, no output yet
+ *                        --> QUINK_OC_ERROR:     error
+ *
+ *   EOF --> flush() --> output buffered frames
+ *
+ * NOTE: The stream parameter is provided by FFmpeg from the CUDA device context.
+ * All async GPU operations should use this stream for proper synchronization.
+ * FFmpeg will synchronize the stream after process() returns.
+ *===========================================================================*/
+
+class QuinkOCCudaProcessPlugin : public QuinkOCPluginBase {
+public:
+    /**
+     * Process frames on CUDA GPU
+     *
+     * This method is called for each set of input frames.
+     * All data remains on GPU - no CPU<->GPU transfers.
+     *
+     * Allowed usage for outputs:
+     *   1. Write directly to output buffer: input.copyTo(output, stream)
+     *   2. Zero-copy pass-through: output = input
+     *
+     * NOT allowed (will cause error):
+     *   - output = input.clone() (defeats zero-copy, use copyTo instead)
+     *   - output.create(...) or any reallocation
+     *
+     * @param inputs   Input cv::cuda::GpuMat images (zero-copy from CUDA AVFrame, refcount tied)
+     * @param outputs  Output cv::cuda::GpuMat images (pre-allocated GPU buffer, refcount tied)
+     * @param stream   CUDA stream for async operations (from FFmpeg's CUDA device context)
+     * @return QUINK_OC_OK:        success, output ready
+     *         QUINK_OC_TRY_AGAIN: success, buffered, no output yet
+     *         QUINK_OC_ERROR:     processing error
+     */
+    virtual QuinkOCProcessResult process(const std::vector<cv::cuda::GpuMat> &inputs,
+                                         std::vector<cv::cuda::GpuMat> &outputs,
+                                         cv::cuda::Stream &stream) = 0;
+
+    /**
+     * Flush buffered frames at end of stream
+     *
+     * Called when input stream ends. The plugin should output any remaining
+     * buffered frames. This method may be called multiple times until it
+     * returns false (no more frames to output).
+     *
+     * @param outputs  Output buffer to write flushed frame into
+     * @param stream   CUDA stream for async operations
+     * @return true if a frame was output, false if no more frames
+     */
+    virtual bool flush(std::vector<cv::cuda::GpuMat> &outputs,
+                       cv::cuda::Stream &stream) = 0;
+
+    /**
+     * Configure plugin with all input/output dimensions
+     *
+     * Called during filter configuration. Plugin sets output dimensions based
+     * on all inputs. Each output's width/height is initialized to corresponding
+     * input's dimensions (output[i] = input[i], or input[0] if i >= num_inputs).
+     *
+     * @param inputs   Input configurations (read-only)
+     * @param outputs  Output configurations (plugin fills width/height)
+     * @return true on success
+     */
+    virtual bool configure(const std::vector<QuinkOCFrameConfig> &inputs,
+                           std::vector<QuinkOCFrameConfig> &outputs) = 0;
+};
+
+/*===========================================================================
  * Detect Plugin Class
  *
  * For plugins that analyze frames and produce detection results.
@@ -319,6 +414,30 @@ typedef const QuinkOCPluginDescriptor* (*QuinkOCPluginGetDescriptorFunc)();
             plugin_name, \
             plugin_desc, \
             QUINK_OC_CAP_PROCESS, \
+            _quink_create, \
+            _quink_destroy \
+        }; \
+        return &desc; \
+    }
+
+/**
+ * Plugin entry macro for CUDA PROCESS plugins
+ *
+ * Usage: QUINK_OC_CUDA_PROCESS_PLUGIN_ENTRY(PluginClass, "name", "description")
+ *
+ * Example:
+ *   class CudaBlurPlugin : public QuinkOCCudaProcessPlugin { ... };
+ *   QUINK_OC_CUDA_PROCESS_PLUGIN_ENTRY(CudaBlurPlugin, "cuda_blur", "CUDA Gaussian blur filter")
+ */
+#define QUINK_OC_CUDA_PROCESS_PLUGIN_ENTRY(PluginClass, plugin_name, plugin_desc) \
+    static QuinkOCPluginBase* _quink_create() { return new PluginClass(); } \
+    static void _quink_destroy(QuinkOCPluginBase* p) { delete p; } \
+    extern "C" QUINK_OC_EXPORT const QuinkOCPluginDescriptor* quink_oc_plugin_get_descriptor() { \
+        static const QuinkOCPluginDescriptor desc = { \
+            QUINK_OC_PLUGIN_API_VERSION, \
+            plugin_name, \
+            plugin_desc, \
+            QUINK_OC_CAP_CUDA_PROCESS, \
             _quink_create, \
             _quink_destroy \
         }; \

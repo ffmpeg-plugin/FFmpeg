@@ -23,6 +23,14 @@ extern "C" {
 
 #include "libavutil/avstring.h"
 #include "libavutil/detection_bbox.h"
+#include "libavutil/hwcontext.h"
+#include "libavutil/pixdesc.h"
+#if CONFIG_CUDA
+#include "compat/cuda/dynlink_loader.h"  /* Must be before hwcontext_cuda.h to define CUDA_VERSION */
+#include "libavutil/cuda_check.h"
+#include "libavutil/hwcontext_cuda.h"
+#include "libavutil/hwcontext_cuda_internal.h"
+#endif
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 
@@ -35,6 +43,11 @@ extern "C" {
 #include "video.h"
 }
 
+/* C++ headers must be outside extern "C" block */
+#if CONFIG_CUDA
+#include <opencv2/core/cuda_stream_accessor.hpp>
+#endif
+
 #ifdef _WIN32
 #include "compat/w32dlfcn.h"
 #else
@@ -43,6 +56,7 @@ extern "C" {
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/core/cuda.hpp>
 #include <new>  /* For placement new */
 #include <vector>
 
@@ -51,19 +65,45 @@ extern "C" {
 #define OC_PLUGIN_MAX_INPUTS  8
 #define OC_PLUGIN_MAX_OUTPUTS 8
 
-static const struct {
-    enum AVPixelFormat av_fmt;
-    int cv_type;
-} pix_fmt_map[] = {
-    { AV_PIX_FMT_BGR24,     CV_8UC3  },
-    { AV_PIX_FMT_BGRA,      CV_8UC4  },
-    { AV_PIX_FMT_GRAY8,     CV_8UC1  },
-    { AV_PIX_FMT_GRAY16LE,  CV_16UC1 },
-    { AV_PIX_FMT_BGR48LE,   CV_16UC3 },
-    { AV_PIX_FMT_NONE,      -1       },
+static AVPixelFormat default_fmts[] = {
+    AV_PIX_FMT_BGR24, AV_PIX_FMT_BGRA, AV_PIX_FMT_NONE
 };
 
-static int pixfmt_to_cv_type(enum AVPixelFormat fmt)
+static const struct QuinkPixFmtMap {
+    enum AVPixelFormat av_fmt;
+    int cv_type;
+    float hscale;
+    QuinkPixelFormat pix_fmt;
+} pix_fmt_map[] = {
+    {AV_PIX_FMT_BGR24,  CV_8UC3, 1.0f, QUINK_PIX_FMT_BGR},
+    {AV_PIX_FMT_BGRA,   CV_8UC4, 1.0f, QUINK_PIX_FMT_BGRA},
+    {AV_PIX_FMT_NV12,   CV_8UC1, 1.5f, QUINK_PIX_FMT_NV12},
+    {AV_PIX_FMT_P010,   CV_16UC1, 1.5f, QUINK_PIX_FMT_P016},
+    {AV_PIX_FMT_P016,   CV_16UC1, 1.5f, QUINK_PIX_FMT_P016},
+    {AV_PIX_FMT_NONE, -1, 1},
+};
+
+static const QuinkPixFmtMap *mapFromAvFmt(enum AVPixelFormat fmt)
+{
+    for (int i = 0; pix_fmt_map[i].av_fmt != AV_PIX_FMT_NONE; i++) {
+        if (pix_fmt_map[i].av_fmt == fmt)
+            return &pix_fmt_map[i];
+    }
+
+    return nullptr;
+}
+
+static AVPixelFormat mapToAvFmt(QuinkPixelFormat pix_fmt)
+{
+    for (int i = 0; pix_fmt_map[i].av_fmt != AV_PIX_FMT_NONE; i++) {
+        if (pix_fmt_map[i].pix_fmt == pix_fmt)
+            return pix_fmt_map[i].av_fmt;
+    }
+
+    return AV_PIX_FMT_NONE;
+}
+
+static int mapToCvType(enum AVPixelFormat fmt)
 {
     for (int i = 0; pix_fmt_map[i].av_fmt != AV_PIX_FMT_NONE; i++) {
         if (pix_fmt_map[i].av_fmt == fmt)
@@ -126,6 +166,99 @@ public:
     }
 };
 
+#if CONFIG_CUDA
+/**
+ * Custom GpuMat allocator that ties GpuMat lifetime to AVFrame refcount.
+ * This enables zero-copy wrapping of CUDA AVFrame data into cv::cuda::GpuMat.
+ *
+ * Similar to AVFrameMatAllocator but for GPU memory.
+ */
+class AVFrameGpuMatAllocator : public cv::cuda::GpuMat::Allocator {
+public:
+    /**
+     * Create a GpuMat that wraps AVFrame GPU data with tied refcount.
+     *
+     * @param frame    The CUDA AVFrame to wrap
+     * @param sw_fmt   Software pixel format (from hw_frames_ctx)
+     * @return GpuMat wrapping the frame's GPU memory, empty on error
+     */
+    static cv::cuda::GpuMat createGpuMat(AVFrame* frame) {
+        if (!frame || frame->format != AV_PIX_FMT_CUDA || !frame->data[0])
+            return cv::cuda::GpuMat();
+
+        AVHWFramesContext *hw_frames_ctx =
+            reinterpret_cast<AVHWFramesContext *>(frame->hw_frames_ctx->data);
+        AVPixelFormat sw_format = hw_frames_ctx->sw_format;
+        auto pix_info = mapFromAvFmt(sw_format);
+        int cv_type = pix_info->cv_type;
+
+        int height = frame->height;
+        int width = frame->width;
+        size_t step = static_cast<size_t>(frame->linesize[0]);
+        height *= pix_info->hscale;
+
+        /* Create GpuMat with custom allocator data */
+        cv::cuda::GpuMat mat(height, width, cv_type, frame->data[0], step);
+
+        /* Clone frame to hold reference */
+        AVFrame* ref_frame = av_frame_clone(frame);
+        if (!ref_frame)
+            return cv::cuda::GpuMat();
+
+        // Store frame reference in GpuMat's refcount field.
+        RefData* ref_data = new RefData{1, ref_frame};
+        mat.allocator = getInstance();
+        mat.refcount = &ref_data->refcount;
+
+        return mat;
+    }
+
+    static AVFrameGpuMatAllocator* getInstance() {
+        static AVFrameGpuMatAllocator instance;
+        return &instance;
+    }
+
+    bool allocate(cv::cuda::GpuMat* mat, int rows, int cols, size_t elemSize) override {
+        (void)mat; (void)rows; (void)cols; (void)elemSize;
+        /* We don't support allocation - only wrapping existing buffers */
+        return false;
+    }
+
+    void free(cv::cuda::GpuMat* mat) override {
+        RefData* ref_data = reinterpret_cast<RefData*>(mat->refcount);
+        av_frame_free(&ref_data->frame);
+        delete ref_data;
+    }
+
+private:
+    struct RefData {
+        int refcount;
+        AVFrame* frame;
+    };
+};
+#endif
+
+class PushPopCudaCtx {
+public:
+    PushPopCudaCtx(void *log_ctx, AVCUDADeviceContext *cuda_hwctx) : cuda_hwctx_(cuda_hwctx) {
+        CudaFunctions *cu = cuda_hwctx_->internal->cuda_dl;
+        int ret = cu->cuCtxPushCurrent(cuda_hwctx_->cuda_ctx);
+        if (ret != CUDA_SUCCESS) {
+            av_log(log_ctx, AV_LOG_ERROR, "Failed to push cuda context %d\n", ret);
+            throw std::runtime_error("Failed to push cuda context");
+        }
+    }
+
+    ~PushPopCudaCtx() {
+        CUcontext dummy;
+        CudaFunctions *cu = cuda_hwctx_->internal->cuda_dl;
+        cu->cuCtxPopCurrent(&dummy);
+    }
+
+private:
+    AVCUDADeviceContext *cuda_hwctx_ = nullptr;
+};
+
 class OCPluginContext {
 public:
     const char *plugin_path = nullptr;
@@ -151,23 +284,63 @@ public:
         if (ret < 0)
             return ret;
 
-        input_mats_.resize(nb_inputs);
-        output_mats_.resize(nb_outputs);
+        if (is_cuda_plugin_) {
+            input_gpu_mats_.resize(nb_inputs);
+            output_gpu_mats_.resize(nb_outputs);
+        } else {
+            input_mats_.resize(nb_inputs);
+            output_mats_.resize(nb_outputs);
+        }
 
         return 0;
     }
+
+    bool isCudaPlugin() const { return is_cuda_plugin_; }
 
     int configure() {
         /* Collect input configurations */
         std::vector<QuinkOCFrameConfig> input_configs(nb_inputs);
         for (int i = 0; i < nb_inputs; i++) {
             AVFilterLink *link = ctx_->inputs[i];
-            int cv_type = pixfmt_to_cv_type(static_cast<AVPixelFormat>(link->format));
-            if (cv_type < 0) {
-                av_log(ctx_, AV_LOG_ERROR, "Unsupported pixel format for input %d\n", i);
+            int cv_type;
+            QuinkPixelFormat pix_fmt = QUINK_PIX_FMT_NONE;
+            AVPixelFormat av_fmt = AV_PIX_FMT_NONE;
+#if CONFIG_CUDA
+            if (is_cuda_plugin_) {
+                /* For CUDA plugins, get software format from CUDA frames */
+                if (link->format != AV_PIX_FMT_CUDA) {
+                    av_log(ctx_, AV_LOG_ERROR,
+                           "CUDA plugin requires AV_PIX_FMT_CUDA input, got %d\n", link->format);
+                    return AVERROR(EINVAL);
+                }
+                FilterLink *fl = ff_filter_link(link);
+                AVHWFramesContext *hw_frames_ctx = fl->hw_frames_ctx ?
+                    (AVHWFramesContext*)fl->hw_frames_ctx->data : nullptr;
+                if (!hw_frames_ctx) {
+                    av_log(ctx_, AV_LOG_ERROR, "Missing hw_frames_ctx for CUDA input\n");
+                    return AVERROR(EINVAL);
+                }
+                av_fmt = hw_frames_ctx->sw_format;
+            } else
+#endif
+            {
+                av_fmt = static_cast<AVPixelFormat>(link->format);
+            }
+
+            const QuinkPixFmtMap *pix_info = mapFromAvFmt(av_fmt);
+            if (!pix_info) {
+                av_log(ctx_, AV_LOG_ERROR,
+                       "Unsupported pixel format %s for input %d.\n",
+                       av_get_pix_fmt_name(av_fmt), i);
                 return AVERROR(EINVAL);
             }
-            input_configs[i] = { link->w, link->h, cv_type };
+            cv_type = pix_info->cv_type;
+            pix_fmt = pix_info->pix_fmt;
+            bool limited_range = false;
+            if (link->color_range != AVCOL_RANGE_UNSPECIFIED)
+                limited_range = link->color_range == AVCOL_RANGE_MPEG;
+            input_configs[i] = {link->w, link->h,          cv_type,
+                                pix_fmt, link->colorspace, limited_range};
         }
 
         /* Initialize output configurations with defaults */
@@ -177,28 +350,77 @@ public:
             out_configs_[i] = {
                 input_configs[src_idx].width,
                 input_configs[src_idx].height,
-                0
+                0,
+                input_configs[src_idx].pix_fmt,
+                input_configs[src_idx].colorspace,
+                input_configs[src_idx].limited_range
             };
         }
 
-        if (process_plugin_) {
-        /* DETECT plugins don't need configure - they pass through frames */
+        /* Call plugin configure */
         if (process_plugin_) {
             if (!process_plugin_->configure(input_configs, out_configs_)) {
                 av_log(ctx_, AV_LOG_ERROR, "Plugin configure failed\n");
                 return AVERROR(EINVAL);
             }
+        } else if (cuda_process_plugin_) {
+            if (!cuda_process_plugin_->configure(input_configs, out_configs_)) {
+                av_log(ctx_, AV_LOG_ERROR, "CUDA Plugin configure failed\n");
+                return AVERROR(EINVAL);
+            }
         }
-        }
+        /* DETECT plugins don't need configure - they pass through frames */
 
-        /* Cache output pixel formats */
-        out_pix_fmts_.resize(nb_outputs);
-        for (int i = 0; i < nb_outputs; i++)
-            out_pix_fmts_[i] = static_cast<AVPixelFormat>(ctx_->outputs[i]->format);
+        if (cuda_process_plugin_ && !createOutputHwFrameCtx())
+            return false;
 
-        configured_ = true;
         return 0;
     }
+
+#if CONFIG_CUDA
+    bool createOutputHwFrameCtx() {
+        AVFilterLink *link = ctx_->inputs[0];
+        FilterLink *inl = ff_filter_link(link);
+        auto in_frames_ctx =
+            reinterpret_cast<AVHWFramesContext *>(inl->hw_frames_ctx->data);
+        AVBufferRef *dev = in_frames_ctx->device_ref;
+        cuda_hwctx_ = static_cast<AVCUDADeviceContext *>(in_frames_ctx->device_ctx->hwctx);
+        /* Create OpenCV CUDA stream from FFmpeg's CUDA stream */
+        cuda_stream_ = cv::cuda::StreamAccessor::wrapStream(
+            static_cast<cudaStream_t>(cuda_hwctx_->stream));
+        for (int i = 0; i < nb_outputs; i++) {
+            AVFilterLink *out = ctx_->outputs[i];
+            FilterLink *out_fl = ff_filter_link(out);
+            AVPixelFormat sw_format = mapToAvFmt(out_configs_[i].pix_fmt);
+            if (sw_format == AV_PIX_FMT_NONE) {
+                av_log(ctx_, AV_LOG_ERROR, "Invalid pix fmt %d in out config index %d\n",
+                    out_configs_[i].pix_fmt, i);
+                return false;
+            }
+
+            AVBufferRef *out_ref = av_hwframe_ctx_alloc(dev);
+            auto out_frames_ctx =
+                reinterpret_cast<AVHWFramesContext *>(out_ref->data);
+            out_frames_ctx->format = AV_PIX_FMT_CUDA;
+            out_frames_ctx->sw_format = sw_format;
+            out_frames_ctx->width = out_configs_[i].width;
+            out_frames_ctx->height = out_configs_[i].height;
+            int ret = av_hwframe_ctx_init(out_ref);
+            if (ret < 0) {
+                av_buffer_unref(&out_ref);
+                return false;
+            }
+
+            out_fl->hw_frames_ctx = out_ref;
+            if (sw_format == AV_PIX_FMT_BGR24 || sw_format == AV_PIX_FMT_BGRA) {
+                out->color_range = AVCOL_RANGE_JPEG;
+                out->colorspace = AVCOL_SPC_RGB;
+            }
+        }
+
+        return true;
+    }
+#endif
 
     /**
      * Process a single input frame (1:1 or 1:N mode).
@@ -207,6 +429,12 @@ public:
         /* For DETECT plugins, use simplified pass-through flow */
         if (is_detect_plugin_)
             return processFrameDetectOnly(inlink, in);
+
+#if CONFIG_CUDA
+        /* For CUDA plugins, use CUDA processing flow */
+        if (is_cuda_plugin_)
+            return processFrameCuda(inlink, in);
+#endif
 
         std::vector<AVFrame*> out_frames(nb_outputs);
 
@@ -227,7 +455,7 @@ public:
             original_out_ptrs[i] = out_frames[i]->data[0];
 
         /* Wrap input as cv::Mat with tied refcount */
-        input_mats_[0] = wrapFrame(in, static_cast<AVPixelFormat>(inlink->format), true);
+        input_mats_[0] = wrapFrame(in, true);
         if (input_mats_[0].empty()) {
             av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input frame\n");
             freeFrames(out_frames, nb_outputs);
@@ -237,7 +465,7 @@ public:
 
         /* Wrap outputs as simple views */
         for (int i = 0; i < nb_outputs; i++) {
-            output_mats_[i] = wrapFrame(out_frames[i], out_pix_fmts_[i], false);
+            output_mats_[i] = wrapFrame(out_frames[i], false);
             if (output_mats_[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap output %d\n", i);
                 clearMats();
@@ -278,13 +506,101 @@ public:
         return outputFrames(out_frames);
     }
 
+#if CONFIG_CUDA
+    /**
+     * Process a single CUDA frame (1:1 or 1:N mode).
+     * Works with AV_PIX_FMT_CUDA frames for zero-copy GPU processing.
+     */
+    int processFrameCuda(AVFilterLink *inlink, AVFrame *in) {
+        (void)inlink;  /* unused */
+
+        if (in->format != AV_PIX_FMT_CUDA) {
+            av_log(ctx_, AV_LOG_ERROR, "CUDA plugin requires CUDA frames, got format %d\n", in->format);
+            av_frame_free(&in);
+            return AVERROR(EINVAL);
+        }
+
+        std::vector<AVFrame*> out_frames(nb_outputs);
+
+        /* Allocate output CUDA frames using ff_get_video_buffer */
+        for (int i = 0; i < nb_outputs; i++) {
+            AVFilterLink *outlink = ctx_->outputs[i];
+            out_frames[i] = ff_get_video_buffer(outlink, out_configs_[i].width, out_configs_[i].height);
+            if (!out_frames[i]) {
+                freeFrames(out_frames, i);
+                av_frame_free(&in);
+                return AVERROR(ENOMEM);
+            }
+            out_frames[i]->pts = in->pts;
+            av_frame_copy_props(out_frames[i], in);
+            out_frames[i]->colorspace = outlink->colorspace;
+            out_frames[i]->color_range = outlink->color_range;
+        }
+
+        /*
+         * Wrap CUDA frames as GpuMat with automatic refcount management.
+         * The GpuMat holds a reference to AVFrame and releases it on destruction.
+         */
+        input_gpu_mats_[0] = AVFrameGpuMatAllocator::createGpuMat(in);
+        if (input_gpu_mats_[0].empty()) {
+            av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input CUDA frame\n");
+            freeFrames(out_frames, nb_outputs);
+            av_frame_free(&in);
+            return AVERROR(EINVAL);
+        }
+
+        for (int i = 0; i < nb_outputs; i++) {
+            output_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(out_frames[i]);
+            if (output_gpu_mats_[i].empty()) {
+                av_log(ctx_, AV_LOG_ERROR, "Failed to wrap output CUDA frame %d\n", i);
+                clearGpuMats();
+                freeFrames(out_frames, nb_outputs);
+                av_frame_free(&in);
+                return AVERROR(EINVAL);
+            }
+        }
+
+        /* Process with CUDA plugin using FFmpeg's CUDA stream */
+        QuinkOCProcessResult result;
+
+        {
+            PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
+            result = cuda_process_plugin_->process(
+                input_gpu_mats_, output_gpu_mats_, cuda_stream_);
+        }
+
+        if (result == QuinkOCProcessResult::QUINK_OC_ERROR) {
+            av_log(ctx_, AV_LOG_ERROR, "CUDA plugin processing failed\n");
+            clearGpuMats();
+            freeFrames(out_frames, nb_outputs);
+            av_frame_free(&in);
+            return AVERROR_EXTERNAL;
+        }
+
+        /* Clear GpuMat wrappers - they release their AVFrame references */
+        clearGpuMats();
+
+        if (result == QuinkOCProcessResult::QUINK_OC_TRY_AGAIN) {
+            freeFrames(out_frames, nb_outputs);
+            av_frame_free(&in);
+            return 0;
+        }
+
+        /* Input frame no longer needed (GpuMat released its reference) */
+        av_frame_free(&in);
+
+        last_pts_ = out_frames[0]->pts;
+        return outputFrames(out_frames);
+    }
+#endif
+
     /**
      * Process frame for DETECT-only plugins.
      * Supports both immediate and delayed output modes.
      */
     int processFrameDetectOnly(AVFilterLink *inlink, AVFrame *in) {
         /* Wrap input as cv::Mat for detection (tied refcount for potential buffering) */
-        cv::Mat input_mat = wrapFrame(in, static_cast<AVPixelFormat>(inlink->format), true);
+        cv::Mat input_mat = wrapFrame(in, true);
         if (input_mat.empty()) {
             av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input frame for detection\n");
             av_frame_free(&in);
@@ -413,8 +729,7 @@ public:
 
         /* Wrap all inputs with tied refcount */
         for (int i = 0; i < nb_inputs; i++) {
-            input_mats_[i] = wrapFrame(inputs[i],
-                static_cast<AVPixelFormat>(ctx_->inputs[i]->format), true);
+            input_mats_[i] = wrapFrame(inputs[i], true);
             if (input_mats_[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input %d\n", i);
                 clearMats();
@@ -425,7 +740,7 @@ public:
 
         /* Wrap outputs as simple views */
         for (int i = 0; i < nb_outputs; i++) {
-            output_mats_[i] = wrapFrame(out_frames[i], out_pix_fmts_[i], false);
+            output_mats_[i] = wrapFrame(out_frames[i], false);
             if (output_mats_[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap output %d\n", i);
                 clearMats();
@@ -470,6 +785,12 @@ public:
         if (is_detect_plugin_)
             return flushDetect();
 
+#if CONFIG_CUDA
+        /* CUDA plugins use flushCuda */
+        if (is_cuda_plugin_)
+            return flushCuda();
+#endif
+
         flushing_ = true;
         std::vector<AVFrame*> out_frames(nb_outputs);
 
@@ -481,7 +802,7 @@ public:
                     flushing_ = false;
                     return AVERROR(ENOMEM);
                 }
-                output_mats_[i] = wrapFrame(out_frames[i], out_pix_fmts_[i], false);
+                output_mats_[i] = wrapFrame(out_frames[i], false);
                 if (output_mats_[i].empty()) {
                     freeFrames(out_frames, i + 1);
                     flushing_ = false;
@@ -543,6 +864,63 @@ public:
         return 0;
     }
 
+#if CONFIG_CUDA
+    /**
+     * Flush buffered frames from CUDA plugin at end of stream.
+     */
+    int flushCuda() {
+        flushing_ = true;
+        std::vector<AVFrame*> out_frames(nb_outputs);
+
+        while (true) {
+            for (int i = 0; i < nb_outputs; i++) {
+                AVFilterLink *outlink = ctx_->outputs[i];
+                out_frames[i] = ff_get_video_buffer(outlink, out_configs_[i].width, out_configs_[i].height);
+                if (!out_frames[i]) {
+                    freeFrames(out_frames, i);
+                    flushing_ = false;
+                    return AVERROR(ENOMEM);
+                }
+                out_frames[i]->pts = last_pts_;
+            }
+
+            /* Wrap output frames as GpuMat with automatic refcount */
+            for (int i = 0; i < nb_outputs; i++) {
+                output_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(out_frames[i]);
+                if (output_gpu_mats_[i].empty()) {
+                    clearGpuMats();
+                    freeFrames(out_frames, nb_outputs);
+                    flushing_ = false;
+                    return AVERROR(EINVAL);
+                }
+            }
+
+            bool has_frame;
+            {
+                PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
+                has_frame = cuda_process_plugin_->flush(output_gpu_mats_, cuda_stream_);
+            }
+
+            clearGpuMats();
+
+            if (!has_frame) {
+                freeFrames(out_frames, nb_outputs);
+                break;
+            }
+
+            last_pts_++;
+            int ret = outputFrames(out_frames);
+            if (ret < 0) {
+                flushing_ = false;
+                return ret;
+            }
+        }
+
+        flushing_ = false;
+        return 0;
+    }
+#endif
+
     bool isFlushing() const { return flushing_; }
     const QuinkOCFrameConfig& getOutputConfig(int idx) const { return out_configs_[idx]; }
 
@@ -553,20 +931,28 @@ private:
     void *dl_handle_ = nullptr;
     const QuinkOCPluginDescriptor *descriptor_ = nullptr;
     QuinkOCPluginBase *plugin_ = nullptr;
-    QuinkOCProcessPlugin *process_plugin_ = nullptr;  ///< Non-null for PROCESS plugins
-    QuinkOCDetectPlugin *detect_plugin_ = nullptr;    ///< Non-null for DETECT plugins
+    QuinkOCProcessPlugin *process_plugin_ = nullptr;         ///< Non-null for CPU PROCESS plugins
+    QuinkOCDetectPlugin *detect_plugin_ = nullptr;           ///< Non-null for DETECT plugins
+    QuinkOCCudaProcessPlugin *cuda_process_plugin_ = nullptr; ///< Non-null for CUDA PROCESS plugins
 
     /* Processing state */
     std::vector<cv::Mat> input_mats_;
     std::vector<cv::Mat> output_mats_;
+    std::vector<cv::cuda::GpuMat> input_gpu_mats_;
+    std::vector<cv::cuda::GpuMat> output_gpu_mats_;
     std::vector<QuinkOCFrameConfig> out_configs_;
-    std::vector<AVPixelFormat> out_pix_fmts_;
 
-    bool configured_ = false;
     bool flushing_ = false;
     int64_t last_pts_ = 0;
     bool is_detect_plugin_ = false;
+    bool is_cuda_plugin_ = false;
     QuinkOCDetections detections_;
+
+#if CONFIG_CUDA
+    /* CUDA context and stream from FFmpeg device context */
+    AVCUDADeviceContext *cuda_hwctx_ = nullptr;
+    cv::cuda::Stream cuda_stream_;
+#endif
 
     /* For DETECT plugins: store input frames for delayed output */
     std::vector<AVFrame*> detect_frame_queue_;
@@ -659,21 +1045,33 @@ private:
         /* Check plugin capabilities */
         bool has_process = (descriptor_->capabilities & QUINK_OC_CAP_PROCESS) != 0;
         bool has_detect = (descriptor_->capabilities & QUINK_OC_CAP_DETECT) != 0;
+        bool has_cuda_process = (descriptor_->capabilities & QUINK_OC_CAP_CUDA_PROCESS) != 0;
 
-        /* Validate: must have exactly one capability */
-        if (has_process && has_detect) {
+#if !CONFIG_CUDA
+        if (has_cuda_process) {
             av_log(ctx_, AV_LOG_ERROR,
-                   "Plugin declares both PROCESS and DETECT capabilities. "
-                   "These are mutually exclusive.\n");
+                   "CUDA plugin not supported - FFmpeg built without CUDA\n");
+            return AVERROR(ENOSYS);
+        }
+#endif
+
+        /* Count capabilities - must have exactly one */
+        int cap_count = (has_process ? 1 : 0) + (has_detect ? 1 : 0) + (has_cuda_process ? 1 : 0);
+        if (cap_count > 1) {
+            av_log(ctx_, AV_LOG_ERROR,
+                   "Plugin declares multiple capabilities. "
+                   "PROCESS, DETECT, and CUDA_PROCESS are mutually exclusive.\n");
             return AVERROR(EINVAL);
         }
-        if (!has_process && !has_detect) {
+        if (cap_count == 0) {
             av_log(ctx_, AV_LOG_ERROR,
-                   "Plugin must declare either QUINK_OC_CAP_PROCESS or QUINK_OC_CAP_DETECT\n");
+                   "Plugin must declare one of: QUINK_OC_CAP_PROCESS, QUINK_OC_CAP_DETECT, "
+                   "or QUINK_OC_CAP_CUDA_PROCESS\n");
             return AVERROR(EINVAL);
         }
 
         is_detect_plugin_ = has_detect;
+        is_cuda_plugin_ = has_cuda_process;
 
         return 0;
     }
@@ -695,6 +1093,15 @@ private:
                 plugin_ = nullptr;
                 return AVERROR(EINVAL);
             }
+        } else if (is_cuda_plugin_) {
+            cuda_process_plugin_ = dynamic_cast<QuinkOCCudaProcessPlugin*>(plugin_);
+            if (!cuda_process_plugin_) {
+                av_log(ctx_, AV_LOG_ERROR,
+                       "Plugin declares CUDA_PROCESS capability but doesn't inherit QuinkOCCudaProcessPlugin\n");
+                descriptor_->destroy(plugin_);
+                plugin_ = nullptr;
+                return AVERROR(EINVAL);
+            }
         } else {
             process_plugin_ = dynamic_cast<QuinkOCProcessPlugin*>(plugin_);
             if (!process_plugin_) {
@@ -712,6 +1119,7 @@ private:
             plugin_ = nullptr;
             process_plugin_ = nullptr;
             detect_plugin_ = nullptr;
+            cuda_process_plugin_ = nullptr;
             return AVERROR(EINVAL);
         }
 
@@ -728,6 +1136,7 @@ private:
             plugin_ = nullptr;
             process_plugin_ = nullptr;
             detect_plugin_ = nullptr;
+            cuda_process_plugin_ = nullptr;
         }
         if (dl_handle_) {
             dlclose(dl_handle_);
@@ -739,8 +1148,8 @@ private:
      * Wrap AVFrame as cv::Mat (zero-copy).
      * @param tie_refcount If true, Mat holds reference to AVFrame.
      */
-    static cv::Mat wrapFrame(AVFrame *frame, AVPixelFormat fmt, bool tie_refcount) {
-        int cv_type = pixfmt_to_cv_type(fmt);
+    static cv::Mat wrapFrame(AVFrame *frame, bool tie_refcount) {
+        int cv_type = mapToCvType(static_cast<enum AVPixelFormat>(frame->format));
         if (cv_type < 0 || !frame || !frame->data[0])
             return cv::Mat();
 
@@ -759,6 +1168,13 @@ private:
                            frame->data[0], static_cast<size_t>(frame->linesize[0]));
         }
     }
+
+#if CONFIG_CUDA
+    void clearGpuMats() {
+        for (auto &m : input_gpu_mats_) m.release();
+        for (auto &m : output_gpu_mats_) m.release();
+    }
+#endif
 
     AVFrame* allocOutputFrame(int idx, int64_t pts) {
         AVFilterLink *outlink = ctx_->outputs[idx];
@@ -882,14 +1298,28 @@ static int query_formats(const AVFilterContext *ctx,
                          AVFilterFormatsConfig **cfg_in,
                          AVFilterFormatsConfig **cfg_out)
 {
-    static AVPixelFormat default_fmts[] = {
-        AV_PIX_FMT_BGR24, AV_PIX_FMT_BGRA, AV_PIX_FMT_GRAY8,
-        AV_PIX_FMT_GRAY16LE, AV_PIX_FMT_BGR48LE, AV_PIX_FMT_NONE
-    };
-    AVFilterFormats *formats = ff_make_pixel_format_list(default_fmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+#if CONFIG_CUDA
+    OCPluginFilterContext *s = static_cast<OCPluginFilterContext*>(ctx->priv);
+    OCPluginContext *oc = get_ctx(s);
+
+    if (oc->isCudaPlugin()) {
+        /* CUDA plugins only support CUDA format */
+        static AVPixelFormat cuda_fmts[] = {
+            AV_PIX_FMT_CUDA, AV_PIX_FMT_NONE
+        };
+        AVFilterFormats *formats = ff_make_pixel_format_list(cuda_fmts);
+        if (!formats)
+            return AVERROR(ENOMEM);
+        return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    }
+#endif
+    {
+        /* CPU plugins support standard software formats */
+        AVFilterFormats *formats = ff_make_pixel_format_list(default_fmts);
+        if (!formats)
+            return AVERROR(ENOMEM);
+        return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+    }
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -1158,6 +1588,7 @@ static FFFilter create_ff_filter() {
     f.p.description = NULL_IF_CONFIG_SMALL("Apply processing using external OpenCV plugin.");
     f.p.priv_class = &oc_plugin_class;
     f.p.flags = AVFILTER_FLAG_DYNAMIC_INPUTS | AVFILTER_FLAG_DYNAMIC_OUTPUTS;
+    f.flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE;
     f.formats_state = FF_FILTER_FORMATS_QUERY_FUNC2;
     f.init = init;
     f.uninit = uninit;
