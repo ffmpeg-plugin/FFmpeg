@@ -298,6 +298,11 @@ public:
     bool isCudaPlugin() const { return is_cuda_plugin_; }
 
     int configure() {
+        /* Guard against multiple calls (config_output is called per output pad) */
+        if (configured_)
+            return 0;
+        configured_ = true;
+
         /* Collect input configurations */
         std::vector<quink::FrameConfig> input_configs(nb_inputs);
         for (int i = 0; i < nb_inputs; i++) {
@@ -708,6 +713,11 @@ public:
             return AVERROR(EINVAL);
         }
 
+#if CONFIG_CUDA
+        if (is_cuda_plugin_)
+            return processFrameMultiCuda(fs, inputs);
+#endif
+
         std::vector<AVFrame*> out_frames(nb_outputs);
 
         /* Allocate output frames */
@@ -776,6 +786,84 @@ public:
         last_pts_ = out_frames[0]->pts;
         return outputFrames(out_frames);
     }
+
+#if CONFIG_CUDA
+    /**
+     * Process multiple CUDA input frames (N:1 mode via framesync).
+     */
+    int processFrameMultiCuda(FFFrameSync *fs, AVFrame **inputs) {
+        std::vector<AVFrame*> out_frames(nb_outputs);
+
+        /* Allocate output CUDA frames */
+        for (int i = 0; i < nb_outputs; i++) {
+            AVFilterLink *outlink = ctx_->outputs[i];
+            int64_t pts = av_rescale_q(fs->pts, fs->time_base, outlink->time_base);
+            out_frames[i] = ff_get_video_buffer(outlink, out_configs_[i].width, out_configs_[i].height);
+            if (!out_frames[i]) {
+                freeFrames(out_frames, i);
+                return AVERROR(ENOMEM);
+            }
+            av_frame_copy_props(out_frames[i], inputs[0]);
+            out_frames[i]->pts = pts;
+            out_frames[i]->colorspace = outlink->colorspace;
+            out_frames[i]->color_range = outlink->color_range;
+        }
+
+        /* Wrap all CUDA input frames as GpuMat */
+        for (int i = 0; i < nb_inputs; i++) {
+            if (inputs[i]->format != AV_PIX_FMT_CUDA) {
+                av_log(ctx_, AV_LOG_ERROR,
+                       "CUDA plugin requires CUDA frames for input %d, got format %d\n",
+                       i, inputs[i]->format);
+                freeFrames(out_frames, nb_outputs);
+                return AVERROR(EINVAL);
+            }
+            input_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(inputs[i]);
+            if (input_gpu_mats_[i].empty()) {
+                av_log(ctx_, AV_LOG_ERROR, "Failed to wrap CUDA input %d\n", i);
+                clearGpuMats();
+                freeFrames(out_frames, nb_outputs);
+                return AVERROR(EINVAL);
+            }
+        }
+
+        /* Wrap output CUDA frames as GpuMat */
+        for (int i = 0; i < nb_outputs; i++) {
+            output_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(out_frames[i]);
+            if (output_gpu_mats_[i].empty()) {
+                av_log(ctx_, AV_LOG_ERROR, "Failed to wrap CUDA output %d\n", i);
+                clearGpuMats();
+                freeFrames(out_frames, nb_outputs);
+                return AVERROR(EINVAL);
+            }
+        }
+
+        /* Process with CUDA plugin */
+        quink::ProcessResult result;
+        {
+            PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
+            result = cuda_process_plugin_->process(
+                input_gpu_mats_, output_gpu_mats_, cuda_stream_);
+        }
+
+        if (result == quink::ProcessResult::Error) {
+            av_log(ctx_, AV_LOG_ERROR, "CUDA plugin multi-input processing failed\n");
+            clearGpuMats();
+            freeFrames(out_frames, nb_outputs);
+            return AVERROR_EXTERNAL;
+        }
+
+        clearGpuMats();
+
+        if (result == quink::ProcessResult::TryAgain) {
+            freeFrames(out_frames, nb_outputs);
+            return 0;
+        }
+
+        last_pts_ = out_frames[0]->pts;
+        return outputFrames(out_frames);
+    }
+#endif
 
     /**
      * Flush buffered frames from plugin at end of stream.
@@ -943,6 +1031,7 @@ private:
     std::vector<quink::FrameConfig> out_configs_;
 
     bool flushing_ = false;
+    bool configured_ = false;
     int64_t last_pts_ = 0;
     bool is_detect_plugin_ = false;
     bool is_cuda_plugin_ = false;
