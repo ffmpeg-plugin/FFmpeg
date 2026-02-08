@@ -169,38 +169,26 @@ public:
 
 #if CONFIG_CUDA
 /**
+ * Wrap a CUDA AVFrame into a cv::cuda::GpuMat (zero-copy view).
+ *
+ * If tie_refcount is true, the returned GpuMat holds a reference to the
+ * AVFrame via a custom allocator, keeping the CUDA buffer alive as long
+ * as any copy of the GpuMat exists.  Used for INPUT frames so that
+ * plugins can safely save a reference (e.g., for zero-copy pass-through).
+ *
+ * If tie_refcount is false, the returned GpuMat is a lightweight view
+ * with no ownership semantics.  Used for OUTPUT frames whose underlying
+ * AVFrame will be sent downstream immediately after process() returns.
+ * The plugin must NOT save a reference to such a GpuMat.
+ */
+static cv::cuda::GpuMat wrapCudaFrame(AVFrame *frame, bool tie_refcount);
+
+/**
  * Custom GpuMat allocator that ties GpuMat lifetime to AVFrame refcount.
+ * Only used internally by wrapCudaFrame(frame, true).
  */
 class AVFrameGpuMatAllocator : public cv::cuda::GpuMat::Allocator {
 public:
-    static cv::cuda::GpuMat createGpuMat(AVFrame* frame) {
-        if (!frame || frame->format != AV_PIX_FMT_CUDA || !frame->data[0])
-            return cv::cuda::GpuMat();
-
-        AVHWFramesContext *hw_frames_ctx =
-            reinterpret_cast<AVHWFramesContext *>(frame->hw_frames_ctx->data);
-        AVPixelFormat sw_format = hw_frames_ctx->sw_format;
-        auto pix_info = mapFromAvFmt(sw_format);
-        int cv_type = pix_info->cv_type;
-
-        int height = frame->height;
-        int width = frame->width;
-        size_t step = static_cast<size_t>(frame->linesize[0]);
-        height *= pix_info->hscale;
-
-        cv::cuda::GpuMat mat(height, width, cv_type, frame->data[0], step);
-
-        AVFrame* ref_frame = av_frame_clone(frame);
-        if (!ref_frame)
-            return cv::cuda::GpuMat();
-
-        RefData* ref_data = new RefData{1, ref_frame};
-        mat.allocator = getInstance();
-        mat.refcount = &ref_data->refcount;
-
-        return mat;
-    }
-
     static AVFrameGpuMatAllocator* getInstance() {
         static AVFrameGpuMatAllocator instance;
         return &instance;
@@ -217,12 +205,41 @@ public:
         delete ref_data;
     }
 
-private:
     struct RefData {
         int refcount;
         AVFrame* frame;
     };
 };
+
+static cv::cuda::GpuMat wrapCudaFrame(AVFrame *frame, bool tie_refcount) {
+    if (!frame || frame->format != AV_PIX_FMT_CUDA || !frame->data[0])
+        return cv::cuda::GpuMat();
+
+    AVHWFramesContext *hw_frames_ctx =
+        reinterpret_cast<AVHWFramesContext *>(frame->hw_frames_ctx->data);
+    AVPixelFormat sw_format = hw_frames_ctx->sw_format;
+    auto pix_info = mapFromAvFmt(sw_format);
+    int cv_type = pix_info->cv_type;
+
+    int height = frame->height;
+    int width = frame->width;
+    size_t step = static_cast<size_t>(frame->linesize[0]);
+    height *= pix_info->hscale;
+
+    cv::cuda::GpuMat mat(height, width, cv_type, frame->data[0], step);
+
+    if (tie_refcount) {
+        AVFrame *ref_frame = av_frame_clone(frame);
+        if (!ref_frame)
+            return cv::cuda::GpuMat();
+
+        auto *ref_data = new AVFrameGpuMatAllocator::RefData{1, ref_frame};
+        mat.allocator = AVFrameGpuMatAllocator::getInstance();
+        mat.refcount = &ref_data->refcount;
+    }
+
+    return mat;
+}
 
 class PushPopCudaCtx {
 public:
@@ -343,13 +360,13 @@ public:
         nb_inputs_ = nb_inputs;
         nb_outputs_ = nb_outputs;
         out_configs_ = out_configs;
-        input_mats_.resize(nb_inputs);
-        output_mats_.resize(nb_outputs);
     }
 
     int processFrame(AVFilterLink *inlink, AVFrame *in) override {
         (void)inlink;
         std::vector<AVFrame*> out_frames(nb_outputs_);
+        std::vector<cv::Mat> input_mats(nb_inputs_);
+        std::vector<cv::Mat> output_mats(nb_outputs_);
 
         for (int i = 0; i < nb_outputs_; i++) {
             out_frames[i] = allocOutputFrame(i, in->pts);
@@ -365,8 +382,8 @@ public:
         for (int i = 0; i < nb_outputs_; i++)
             original_out_ptrs[i] = out_frames[i]->data[0];
 
-        input_mats_[0] = wrapFrame(in, true);
-        if (input_mats_[0].empty()) {
+        input_mats[0] = wrapFrame(in, true);
+        if (input_mats[0].empty()) {
             av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input frame\n");
             freeFrames(out_frames, nb_outputs_);
             av_frame_free(&in);
@@ -374,35 +391,32 @@ public:
         }
 
         for (int i = 0; i < nb_outputs_; i++) {
-            output_mats_[i] = wrapFrame(out_frames[i], false);
-            if (output_mats_[i].empty()) {
+            output_mats[i] = wrapFrame(out_frames[i], false);
+            if (output_mats[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap output %d\n", i);
-                clearMats();
                 freeFrames(out_frames, nb_outputs_);
                 av_frame_free(&in);
                 return AVERROR(EINVAL);
             }
         }
 
-        quink::ProcessResult result = plugin_->process(input_mats_, output_mats_);
+        quink::ProcessResult result = plugin_->process(input_mats, output_mats);
 
         if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "Plugin processing failed\n");
-            clearMats();
             freeFrames(out_frames, nb_outputs_);
             av_frame_free(&in);
             return AVERROR_EXTERNAL;
         }
 
         if (result == quink::ProcessResult::TryAgain) {
-            clearMats();
             freeFrames(out_frames, nb_outputs_);
             av_frame_free(&in);
             return 0;
         }
 
-        int ret = handleOutputReassignment(out_frames, original_out_ptrs, in);
-        clearMats();
+        int ret = handleOutputReassignment(out_frames, original_out_ptrs,
+                                           input_mats, output_mats, in);
         av_frame_free(&in);
 
         if (ret < 0) {
@@ -416,6 +430,8 @@ public:
 
     int processFrameMulti(FFFrameSync *fs, AVFrame **inputs) override {
         std::vector<AVFrame*> out_frames(nb_outputs_);
+        std::vector<cv::Mat> input_mats(nb_inputs_);
+        std::vector<cv::Mat> output_mats(nb_outputs_);
 
         for (int i = 0; i < nb_outputs_; i++) {
             int64_t pts = av_rescale_q(fs->pts, fs->time_base, ctx_->outputs[i]->time_base);
@@ -433,42 +449,38 @@ public:
             original_out_ptrs[i] = out_frames[i]->data[0];
 
         for (int i = 0; i < nb_inputs_; i++) {
-            input_mats_[i] = wrapFrame(inputs[i], true);
-            if (input_mats_[i].empty()) {
+            input_mats[i] = wrapFrame(inputs[i], true);
+            if (input_mats[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input %d\n", i);
-                clearMats();
                 freeFrames(out_frames, nb_outputs_);
                 return AVERROR(EINVAL);
             }
         }
 
         for (int i = 0; i < nb_outputs_; i++) {
-            output_mats_[i] = wrapFrame(out_frames[i], false);
-            if (output_mats_[i].empty()) {
+            output_mats[i] = wrapFrame(out_frames[i], false);
+            if (output_mats[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap output %d\n", i);
-                clearMats();
                 freeFrames(out_frames, nb_outputs_);
                 return AVERROR(EINVAL);
             }
         }
 
-        quink::ProcessResult result = plugin_->process(input_mats_, output_mats_);
+        quink::ProcessResult result = plugin_->process(input_mats, output_mats);
 
         if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "Plugin processing failed\n");
-            clearMats();
             freeFrames(out_frames, nb_outputs_);
             return AVERROR_EXTERNAL;
         }
 
         if (result == quink::ProcessResult::TryAgain) {
-            clearMats();
             freeFrames(out_frames, nb_outputs_);
             return 0;
         }
 
-        int ret = handleOutputReassignment(out_frames, original_out_ptrs, inputs[0]);
-        clearMats();
+        int ret = handleOutputReassignment(out_frames, original_out_ptrs,
+                                           input_mats, output_mats, inputs[0]);
 
         if (ret < 0) {
             freeFrames(out_frames, nb_outputs_);
@@ -484,6 +496,8 @@ public:
         std::vector<AVFrame*> out_frames(nb_outputs_);
 
         while (true) {
+            std::vector<cv::Mat> output_mats(nb_outputs_);
+
             for (int i = 0; i < nb_outputs_; i++) {
                 out_frames[i] = allocOutputFrame(i, last_pts_);
                 if (!out_frames[i]) {
@@ -491,25 +505,20 @@ public:
                     flushing_ = false;
                     return AVERROR(ENOMEM);
                 }
-                output_mats_[i] = wrapFrame(out_frames[i], false);
-                if (output_mats_[i].empty()) {
+                output_mats[i] = wrapFrame(out_frames[i], false);
+                if (output_mats[i].empty()) {
                     freeFrames(out_frames, i + 1);
                     flushing_ = false;
                     return AVERROR(EINVAL);
                 }
             }
 
-            bool has_frame = plugin_->flush(output_mats_);
+            bool has_frame = plugin_->flush(output_mats);
 
             if (!has_frame) {
-                for (int i = 0; i < nb_outputs_; i++)
-                    output_mats_[i].release();
                 freeFrames(out_frames, nb_outputs_);
                 break;
             }
-
-            for (int i = 0; i < nb_outputs_; i++)
-                output_mats_[i].release();
 
             last_pts_++;
             int ret = outputFrames(ctx_, out_frames, nb_outputs_);
@@ -525,13 +534,6 @@ public:
 
 private:
     quink::ProcessPlugin *plugin_;
-    std::vector<cv::Mat> input_mats_;
-    std::vector<cv::Mat> output_mats_;
-
-    void clearMats() {
-        for (auto &m : input_mats_) m.release();
-        for (auto &m : output_mats_) m.release();
-    }
 
     AVFrame* allocOutputFrame(int idx, int64_t pts) {
         AVFilterLink *outlink = ctx_->outputs[idx];
@@ -542,14 +544,17 @@ private:
         return out;
     }
 
-    AVFrame* findInputFrameByData(uint8_t *data, AVFrame *single_input) {
+    static AVFrame* findInputFrameByData(uint8_t *data,
+                                          const std::vector<cv::Mat> &input_mats,
+                                          int nb_inputs,
+                                          AVFrame *single_input) {
         if (single_input && data == single_input->data[0])
             return single_input;
 
-        for (int i = 0; i < nb_inputs_; i++) {
-            if (!input_mats_[i].empty() && input_mats_[i].data == data) {
-                if (input_mats_[i].u && input_mats_[i].u->userdata)
-                    return static_cast<AVFrame*>(input_mats_[i].u->userdata);
+        for (int i = 0; i < nb_inputs; i++) {
+            if (!input_mats[i].empty() && input_mats[i].data == data) {
+                if (input_mats[i].u && input_mats[i].u->userdata)
+                    return static_cast<AVFrame*>(input_mats[i].u->userdata);
             }
         }
         return nullptr;
@@ -557,15 +562,18 @@ private:
 
     int handleOutputReassignment(std::vector<AVFrame*> &out_frames,
                                   const std::vector<uint8_t*> &original_out_ptrs,
+                                  const std::vector<cv::Mat> &input_mats,
+                                  const std::vector<cv::Mat> &output_mats,
                                   AVFrame *ref_input) {
         for (int i = 0; i < nb_outputs_; i++) {
-            uint8_t *current_data = output_mats_[i].data;
+            uint8_t *current_data = output_mats[i].data;
             uint8_t *original_data = original_out_ptrs[i];
 
             if (current_data == original_data)
                 continue;
 
-            AVFrame *input_frame = findInputFrameByData(current_data, ref_input);
+            AVFrame *input_frame = findInputFrameByData(
+                current_data, input_mats, nb_inputs_, ref_input);
             if (input_frame) {
                 av_log(ctx_, AV_LOG_DEBUG,
                        "Output %d: zero-copy pass-through from input\n", i);
@@ -605,8 +613,6 @@ public:
         nb_inputs_ = nb_inputs;
         nb_outputs_ = nb_outputs;
         out_configs_ = out_configs;
-        input_gpu_mats_.resize(nb_inputs);
-        output_gpu_mats_.resize(nb_outputs);
     }
 
     int configurePipeline() override {
@@ -677,8 +683,11 @@ public:
             out_frames[i]->color_range = outlink->color_range;
         }
 
-        input_gpu_mats_[0] = AVFrameGpuMatAllocator::createGpuMat(in);
-        if (input_gpu_mats_[0].empty()) {
+        std::vector<cv::cuda::GpuMat> input_gpu_mats(nb_inputs_);
+        std::vector<cv::cuda::GpuMat> output_gpu_mats(nb_outputs_);
+
+        input_gpu_mats[0] = wrapCudaFrame(in, true);
+        if (input_gpu_mats[0].empty()) {
             av_log(ctx_, AV_LOG_ERROR, "Failed to wrap input CUDA frame\n");
             freeFrames(out_frames, nb_outputs_);
             av_frame_free(&in);
@@ -686,10 +695,9 @@ public:
         }
 
         for (int i = 0; i < nb_outputs_; i++) {
-            output_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(out_frames[i]);
-            if (output_gpu_mats_[i].empty()) {
+            output_gpu_mats[i] = wrapCudaFrame(out_frames[i], false);
+            if (output_gpu_mats[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap output CUDA frame %d\n", i);
-                clearGpuMats();
                 freeFrames(out_frames, nb_outputs_);
                 av_frame_free(&in);
                 return AVERROR(EINVAL);
@@ -699,18 +707,15 @@ public:
         quink::ProcessResult result;
         {
             PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
-            result = plugin_->process(input_gpu_mats_, output_gpu_mats_, cuda_stream_);
+            result = plugin_->process(input_gpu_mats, output_gpu_mats, cuda_stream_);
         }
 
         if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "CUDA plugin processing failed\n");
-            clearGpuMats();
             freeFrames(out_frames, nb_outputs_);
             av_frame_free(&in);
             return AVERROR_EXTERNAL;
         }
-
-        clearGpuMats();
 
         if (result == quink::ProcessResult::TryAgain) {
             freeFrames(out_frames, nb_outputs_);
@@ -740,6 +745,9 @@ public:
             out_frames[i]->color_range = outlink->color_range;
         }
 
+        std::vector<cv::cuda::GpuMat> input_gpu_mats(nb_inputs_);
+        std::vector<cv::cuda::GpuMat> output_gpu_mats(nb_outputs_);
+
         for (int i = 0; i < nb_inputs_; i++) {
             if (inputs[i]->format != AV_PIX_FMT_CUDA) {
                 av_log(ctx_, AV_LOG_ERROR,
@@ -748,20 +756,18 @@ public:
                 freeFrames(out_frames, nb_outputs_);
                 return AVERROR(EINVAL);
             }
-            input_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(inputs[i]);
-            if (input_gpu_mats_[i].empty()) {
+            input_gpu_mats[i] = wrapCudaFrame(inputs[i], true);
+            if (input_gpu_mats[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap CUDA input %d\n", i);
-                clearGpuMats();
                 freeFrames(out_frames, nb_outputs_);
                 return AVERROR(EINVAL);
             }
         }
 
         for (int i = 0; i < nb_outputs_; i++) {
-            output_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(out_frames[i]);
-            if (output_gpu_mats_[i].empty()) {
+            output_gpu_mats[i] = wrapCudaFrame(out_frames[i], false);
+            if (output_gpu_mats[i].empty()) {
                 av_log(ctx_, AV_LOG_ERROR, "Failed to wrap CUDA output %d\n", i);
-                clearGpuMats();
                 freeFrames(out_frames, nb_outputs_);
                 return AVERROR(EINVAL);
             }
@@ -770,17 +776,14 @@ public:
         quink::ProcessResult result;
         {
             PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
-            result = plugin_->process(input_gpu_mats_, output_gpu_mats_, cuda_stream_);
+            result = plugin_->process(input_gpu_mats, output_gpu_mats, cuda_stream_);
         }
 
         if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "CUDA plugin multi-input processing failed\n");
-            clearGpuMats();
             freeFrames(out_frames, nb_outputs_);
             return AVERROR_EXTERNAL;
         }
-
-        clearGpuMats();
 
         if (result == quink::ProcessResult::TryAgain) {
             freeFrames(out_frames, nb_outputs_);
@@ -796,6 +799,8 @@ public:
         std::vector<AVFrame*> out_frames(nb_outputs_);
 
         while (true) {
+            std::vector<cv::cuda::GpuMat> output_gpu_mats(nb_outputs_);
+
             for (int i = 0; i < nb_outputs_; i++) {
                 AVFilterLink *outlink = ctx_->outputs[i];
                 out_frames[i] = ff_get_video_buffer(outlink, (*out_configs_)[i].width, (*out_configs_)[i].height);
@@ -808,9 +813,8 @@ public:
             }
 
             for (int i = 0; i < nb_outputs_; i++) {
-                output_gpu_mats_[i] = AVFrameGpuMatAllocator::createGpuMat(out_frames[i]);
-                if (output_gpu_mats_[i].empty()) {
-                    clearGpuMats();
+                output_gpu_mats[i] = wrapCudaFrame(out_frames[i], false);
+                if (output_gpu_mats[i].empty()) {
                     freeFrames(out_frames, nb_outputs_);
                     flushing_ = false;
                     return AVERROR(EINVAL);
@@ -820,10 +824,8 @@ public:
             bool has_frame;
             {
                 PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
-                has_frame = plugin_->flush(output_gpu_mats_, cuda_stream_);
+                has_frame = plugin_->flush(output_gpu_mats, cuda_stream_);
             }
-
-            clearGpuMats();
 
             if (!has_frame) {
                 freeFrames(out_frames, nb_outputs_);
@@ -846,13 +848,6 @@ private:
     quink::CudaProcessPlugin *plugin_;
     AVCUDADeviceContext *cuda_hwctx_ = nullptr;
     cv::cuda::Stream cuda_stream_;
-    std::vector<cv::cuda::GpuMat> input_gpu_mats_;
-    std::vector<cv::cuda::GpuMat> output_gpu_mats_;
-
-    void clearGpuMats() {
-        for (auto &m : input_gpu_mats_) m.release();
-        for (auto &m : output_gpu_mats_) m.release();
-    }
 };
 #endif /* CONFIG_CUDA */
 

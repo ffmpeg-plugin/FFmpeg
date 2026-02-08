@@ -195,9 +195,14 @@ public:
      * NOT allowed (will cause error):
      *   - output = input.clone() (defeats zero-copy, use copyTo instead)
      *   - output.create(...) or any reallocation
+     *   - Saving a reference to output beyond process() lifetime
+     *     (the underlying buffer is owned by FFmpeg and will be sent
+     *     downstream immediately after process() returns)
      *
-     * @param inputs   Input cv::Mat images (zero-copy from FFmpeg, refcount tied to AVFrame)
-     * @param outputs  Output cv::Mat images (pre-allocated buffer to write into)
+     * @param inputs   Input cv::Mat images (zero-copy from FFmpeg, refcount tied to AVFrame.
+     *                 Safe to save a reference for buffering / pass-through)
+     * @param outputs  Output cv::Mat images (pre-allocated buffer, NO refcount.
+     *                 Only valid during this process() call. Do NOT save references)
      * @return ProcessResult::Ok:       success, output ready
      *         ProcessResult::TryAgain: success, buffered, no output yet
      *         ProcessResult::Error:    processing error
@@ -271,9 +276,14 @@ public:
      * NOT allowed (will cause error):
      *   - output = input.clone() (defeats zero-copy, use copyTo instead)
      *   - output.create(...) or any reallocation
+     *   - Saving a reference to output beyond process() lifetime
+     *     (the underlying buffer is owned by FFmpeg and will be sent
+     *     downstream immediately after process() returns)
      *
-     * @param inputs   Input cv::cuda::GpuMat images (zero-copy from CUDA AVFrame, refcount tied)
-     * @param outputs  Output cv::cuda::GpuMat images (pre-allocated GPU buffer, refcount tied)
+     * @param inputs   Input cv::cuda::GpuMat images (zero-copy from CUDA AVFrame, refcount tied.
+     *                 Safe to save a reference for buffering / pass-through)
+     * @param outputs  Output cv::cuda::GpuMat images (pre-allocated GPU buffer, NO refcount.
+     *                 Only valid during this process() call. Do NOT save references)
      * @param stream   CUDA stream for async operations (from FFmpeg's CUDA device context)
      * @return ProcessResult::Ok:       success, output ready
      *         ProcessResult::TryAgain: success, buffered, no output yet
