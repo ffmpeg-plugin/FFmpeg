@@ -69,21 +69,21 @@ static AVPixelFormat default_fmts[] = {
     AV_PIX_FMT_BGR24, AV_PIX_FMT_BGRA, AV_PIX_FMT_NONE
 };
 
-static const struct QuinkPixFmtMap {
+static const struct PixFmtMap {
     enum AVPixelFormat av_fmt;
     int cv_type;
     float hscale;
-    QuinkPixelFormat pix_fmt;
+    quink::QPixelFormat pix_fmt;
 } pix_fmt_map[] = {
-    {AV_PIX_FMT_BGR24,  CV_8UC3, 1.0f, QUINK_PIX_FMT_BGR},
-    {AV_PIX_FMT_BGRA,   CV_8UC4, 1.0f, QUINK_PIX_FMT_BGRA},
-    {AV_PIX_FMT_NV12,   CV_8UC1, 1.5f, QUINK_PIX_FMT_NV12},
-    {AV_PIX_FMT_P010,   CV_16UC1, 1.5f, QUINK_PIX_FMT_P016},
-    {AV_PIX_FMT_P016,   CV_16UC1, 1.5f, QUINK_PIX_FMT_P016},
+    {AV_PIX_FMT_BGR24,  CV_8UC3, 1.0f, quink::QPixelFormat::BGR},
+    {AV_PIX_FMT_BGRA,   CV_8UC4, 1.0f, quink::QPixelFormat::BGRA},
+    {AV_PIX_FMT_NV12,   CV_8UC1, 1.5f, quink::QPixelFormat::NV12},
+    {AV_PIX_FMT_P010,   CV_16UC1, 1.5f, quink::QPixelFormat::P016},
+    {AV_PIX_FMT_P016,   CV_16UC1, 1.5f, quink::QPixelFormat::P016},
     {AV_PIX_FMT_NONE, -1, 1},
 };
 
-static const QuinkPixFmtMap *mapFromAvFmt(enum AVPixelFormat fmt)
+static const PixFmtMap *mapFromAvFmt(enum AVPixelFormat fmt)
 {
     for (int i = 0; pix_fmt_map[i].av_fmt != AV_PIX_FMT_NONE; i++) {
         if (pix_fmt_map[i].av_fmt == fmt)
@@ -93,7 +93,7 @@ static const QuinkPixFmtMap *mapFromAvFmt(enum AVPixelFormat fmt)
     return nullptr;
 }
 
-static AVPixelFormat mapToAvFmt(QuinkPixelFormat pix_fmt)
+static AVPixelFormat mapToAvFmt(quink::QPixelFormat pix_fmt)
 {
     for (int i = 0; pix_fmt_map[i].av_fmt != AV_PIX_FMT_NONE; i++) {
         if (pix_fmt_map[i].pix_fmt == pix_fmt)
@@ -299,11 +299,11 @@ public:
 
     int configure() {
         /* Collect input configurations */
-        std::vector<QuinkOCFrameConfig> input_configs(nb_inputs);
+        std::vector<quink::FrameConfig> input_configs(nb_inputs);
         for (int i = 0; i < nb_inputs; i++) {
             AVFilterLink *link = ctx_->inputs[i];
             int cv_type;
-            QuinkPixelFormat pix_fmt = QUINK_PIX_FMT_NONE;
+            quink::QPixelFormat pix_fmt = quink::QPixelFormat::None;
             AVPixelFormat av_fmt = AV_PIX_FMT_NONE;
 #if CONFIG_CUDA
             if (is_cuda_plugin_) {
@@ -327,7 +327,7 @@ public:
                 av_fmt = static_cast<AVPixelFormat>(link->format);
             }
 
-            const QuinkPixFmtMap *pix_info = mapFromAvFmt(av_fmt);
+            const PixFmtMap *pix_info = mapFromAvFmt(av_fmt);
             if (!pix_info) {
                 av_log(ctx_, AV_LOG_ERROR,
                        "Unsupported pixel format %s for input %d.\n",
@@ -394,7 +394,7 @@ public:
             AVPixelFormat sw_format = mapToAvFmt(out_configs_[i].pix_fmt);
             if (sw_format == AV_PIX_FMT_NONE) {
                 av_log(ctx_, AV_LOG_ERROR, "Invalid pix fmt %d in out config index %d\n",
-                    out_configs_[i].pix_fmt, i);
+                    static_cast<int>(out_configs_[i].pix_fmt), i);
                 return false;
             }
 
@@ -475,9 +475,9 @@ public:
             }
         }
 
-        QuinkOCProcessResult result = process_plugin_->process(input_mats_, output_mats_);
+        quink::ProcessResult result = process_plugin_->process(input_mats_, output_mats_);
 
-        if (result == QuinkOCProcessResult::QUINK_OC_ERROR) {
+        if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "Plugin processing failed\n");
             clearMats();
             freeFrames(out_frames, nb_outputs);
@@ -485,7 +485,7 @@ public:
             return AVERROR_EXTERNAL;
         }
 
-        if (result == QuinkOCProcessResult::QUINK_OC_TRY_AGAIN) {
+        if (result == quink::ProcessResult::TryAgain) {
             clearMats();
             freeFrames(out_frames, nb_outputs);
             av_frame_free(&in);
@@ -561,7 +561,7 @@ public:
         }
 
         /* Process with CUDA plugin using FFmpeg's CUDA stream */
-        QuinkOCProcessResult result;
+        quink::ProcessResult result;
 
         {
             PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
@@ -569,7 +569,7 @@ public:
                 input_gpu_mats_, output_gpu_mats_, cuda_stream_);
         }
 
-        if (result == QuinkOCProcessResult::QUINK_OC_ERROR) {
+        if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "CUDA plugin processing failed\n");
             clearGpuMats();
             freeFrames(out_frames, nb_outputs);
@@ -580,7 +580,7 @@ public:
         /* Clear GpuMat wrappers - they release their AVFrame references */
         clearGpuMats();
 
-        if (result == QuinkOCProcessResult::QUINK_OC_TRY_AGAIN) {
+        if (result == quink::ProcessResult::TryAgain) {
             freeFrames(out_frames, nb_outputs);
             av_frame_free(&in);
             return 0;
@@ -613,9 +613,9 @@ public:
         /* Run detection */
         cv::Mat output_mat;
         detections_.clear();
-        QuinkOCProcessResult result = detect_plugin_->detect(input_mat, output_mat, detections_);
+        quink::ProcessResult result = detect_plugin_->detect(input_mat, output_mat, detections_);
 
-        if (result == QuinkOCProcessResult::QUINK_OC_ERROR) {
+        if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "Detection failed for frame pts %" PRId64 "\n", in->pts);
             /* Clean up queued frames */
             for (auto *f : detect_frame_queue_)
@@ -624,7 +624,7 @@ public:
             return AVERROR_EXTERNAL;
         }
 
-        if (result == QuinkOCProcessResult::QUINK_OC_TRY_AGAIN) {
+        if (result == quink::ProcessResult::TryAgain) {
             /* Frame buffered by plugin, no output yet */
             av_log(ctx_, AV_LOG_DEBUG, "Detection buffering frame pts %" PRId64 "\n", in->pts);
             return 0;
@@ -749,16 +749,16 @@ public:
             }
         }
 
-        QuinkOCProcessResult result = process_plugin_->process(input_mats_, output_mats_);
+        quink::ProcessResult result = process_plugin_->process(input_mats_, output_mats_);
 
-        if (result == QuinkOCProcessResult::QUINK_OC_ERROR) {
+        if (result == quink::ProcessResult::Error) {
             av_log(ctx_, AV_LOG_ERROR, "Plugin processing failed\n");
             clearMats();
             freeFrames(out_frames, nb_outputs);
             return AVERROR_EXTERNAL;
         }
 
-        if (result == QuinkOCProcessResult::QUINK_OC_TRY_AGAIN) {
+        if (result == quink::ProcessResult::TryAgain) {
             clearMats();
             freeFrames(out_frames, nb_outputs);
             return 0;
@@ -922,7 +922,7 @@ public:
 #endif
 
     bool isFlushing() const { return flushing_; }
-    const QuinkOCFrameConfig& getOutputConfig(int idx) const { return out_configs_[idx]; }
+    const quink::FrameConfig& getOutputConfig(int idx) const { return out_configs_[idx]; }
 
 private:
     AVFilterContext *ctx_ = nullptr;
@@ -930,23 +930,23 @@ private:
     /* Plugin handle and instance */
     void *dl_handle_ = nullptr;
     const QuinkOCPluginDescriptor *descriptor_ = nullptr;
-    QuinkOCPluginBase *plugin_ = nullptr;
-    QuinkOCProcessPlugin *process_plugin_ = nullptr;         ///< Non-null for CPU PROCESS plugins
-    QuinkOCDetectPlugin *detect_plugin_ = nullptr;           ///< Non-null for DETECT plugins
-    QuinkOCCudaProcessPlugin *cuda_process_plugin_ = nullptr; ///< Non-null for CUDA PROCESS plugins
+    quink::PluginBase *plugin_ = nullptr;
+    quink::ProcessPlugin *process_plugin_ = nullptr;         ///< Non-null for CPU PROCESS plugins
+    quink::DetectPlugin *detect_plugin_ = nullptr;           ///< Non-null for DETECT plugins
+    quink::CudaProcessPlugin *cuda_process_plugin_ = nullptr; ///< Non-null for CUDA PROCESS plugins
 
     /* Processing state */
     std::vector<cv::Mat> input_mats_;
     std::vector<cv::Mat> output_mats_;
     std::vector<cv::cuda::GpuMat> input_gpu_mats_;
     std::vector<cv::cuda::GpuMat> output_gpu_mats_;
-    std::vector<QuinkOCFrameConfig> out_configs_;
+    std::vector<quink::FrameConfig> out_configs_;
 
     bool flushing_ = false;
     int64_t last_pts_ = 0;
     bool is_detect_plugin_ = false;
     bool is_cuda_plugin_ = false;
-    QuinkOCDetections detections_;
+    quink::Detections detections_;
 
 #if CONFIG_CUDA
     /* CUDA context and stream from FFmpeg device context */
@@ -1043,9 +1043,9 @@ private:
         }
 
         /* Check plugin capabilities */
-        bool has_process = (descriptor_->capabilities & QUINK_OC_CAP_PROCESS) != 0;
-        bool has_detect = (descriptor_->capabilities & QUINK_OC_CAP_DETECT) != 0;
-        bool has_cuda_process = (descriptor_->capabilities & QUINK_OC_CAP_CUDA_PROCESS) != 0;
+        bool has_process = (descriptor_->capabilities & static_cast<unsigned int>(quink::Capability::Process)) != 0;
+        bool has_detect = (descriptor_->capabilities & static_cast<unsigned int>(quink::Capability::Detect)) != 0;
+        bool has_cuda_process = (descriptor_->capabilities & static_cast<unsigned int>(quink::Capability::CudaProcess)) != 0;
 
 #if !CONFIG_CUDA
         if (has_cuda_process) {
@@ -1065,8 +1065,7 @@ private:
         }
         if (cap_count == 0) {
             av_log(ctx_, AV_LOG_ERROR,
-                   "Plugin must declare one of: QUINK_OC_CAP_PROCESS, QUINK_OC_CAP_DETECT, "
-                   "or QUINK_OC_CAP_CUDA_PROCESS\n");
+                   "Plugin must declare PROCESS, DETECT, or CUDA_PROCESS capability\n");
             return AVERROR(EINVAL);
         }
 
@@ -1085,28 +1084,28 @@ private:
 
         /* Cast to appropriate derived type based on capabilities */
         if (is_detect_plugin_) {
-            detect_plugin_ = dynamic_cast<QuinkOCDetectPlugin*>(plugin_);
+            detect_plugin_ = dynamic_cast<quink::DetectPlugin*>(plugin_);
             if (!detect_plugin_) {
                 av_log(ctx_, AV_LOG_ERROR,
-                       "Plugin declares DETECT capability but doesn't inherit QuinkOCDetectPlugin\n");
+                       "Plugin declares DETECT capability but doesn't inherit quink::DetectPlugin\n");
                 descriptor_->destroy(plugin_);
                 plugin_ = nullptr;
                 return AVERROR(EINVAL);
             }
         } else if (is_cuda_plugin_) {
-            cuda_process_plugin_ = dynamic_cast<QuinkOCCudaProcessPlugin*>(plugin_);
+            cuda_process_plugin_ = dynamic_cast<quink::CudaProcessPlugin*>(plugin_);
             if (!cuda_process_plugin_) {
                 av_log(ctx_, AV_LOG_ERROR,
-                       "Plugin declares CUDA_PROCESS capability but doesn't inherit QuinkOCCudaProcessPlugin\n");
+                       "Plugin declares CUDA_PROCESS capability but doesn't inherit quink::CudaProcessPlugin\n");
                 descriptor_->destroy(plugin_);
                 plugin_ = nullptr;
                 return AVERROR(EINVAL);
             }
         } else {
-            process_plugin_ = dynamic_cast<QuinkOCProcessPlugin*>(plugin_);
+            process_plugin_ = dynamic_cast<quink::ProcessPlugin*>(plugin_);
             if (!process_plugin_) {
                 av_log(ctx_, AV_LOG_ERROR,
-                       "Plugin declares PROCESS capability but doesn't inherit QuinkOCProcessPlugin\n");
+                       "Plugin declares PROCESS capability but doesn't inherit quink::ProcessPlugin\n");
                 descriptor_->destroy(plugin_);
                 plugin_ = nullptr;
                 return AVERROR(EINVAL);
@@ -1433,7 +1432,7 @@ static int config_output(AVFilterLink *outlink)
     for (int i = 0; i < s->nb_outputs; i++) {
         AVFilterLink *out = ctx->outputs[i];
         FilterLink *out_fl = ff_filter_link(out);
-        const QuinkOCFrameConfig &cfg = oc->getOutputConfig(i);
+        const quink::FrameConfig &cfg = oc->getOutputConfig(i);
 
         out->w = cfg.width;
         out->h = cfg.height;
