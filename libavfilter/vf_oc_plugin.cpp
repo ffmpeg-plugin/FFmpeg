@@ -1309,7 +1309,38 @@ static int query_formats(const AVFilterContext *ctx,
         AVFilterFormats *formats = ff_make_pixel_format_list(cuda_fmts);
         if (!formats)
             return AVERROR(ENOMEM);
-        return ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+        int ret = ff_set_common_formats2(ctx, cfg_in, cfg_out, formats);
+        if (ret < 0)
+            return ret;
+
+        /*
+         * Set independent color_ranges and color_spaces for each input/output.
+         *
+         * We must NOT use ff_set_common_all_color_ranges/spaces (which shares
+         * a single list across all links). The plugin may change sw_format
+         * (e.g., NV12 limited-range → BGRA full-range), so the output
+         * color_range/space can differ from the input. If we share a single
+         * list, upstream negotiation (e.g., buffersrc constraining to "tv")
+         * would propagate to downstream, making it impossible for downstream
+         * to request a different range (e.g., "pc/full").
+         */
+        for (int i = 0; i < ctx->nb_inputs; i++) {
+            ret = ff_formats_ref(ff_all_color_ranges(), &cfg_in[i]->color_ranges);
+            if (ret < 0)
+                return ret;
+            ret = ff_formats_ref(ff_all_color_spaces(), &cfg_in[i]->color_spaces);
+            if (ret < 0)
+                return ret;
+        }
+        for (int i = 0; i < ctx->nb_outputs; i++) {
+            ret = ff_formats_ref(ff_all_color_ranges(), &cfg_out[i]->color_ranges);
+            if (ret < 0)
+                return ret;
+            ret = ff_formats_ref(ff_all_color_spaces(), &cfg_out[i]->color_spaces);
+            if (ret < 0)
+                return ret;
+        }
+        return 0;
     }
 #endif
     {
