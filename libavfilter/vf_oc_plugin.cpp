@@ -704,6 +704,10 @@ public:
             }
         }
 
+        std::vector<uint8_t*> original_out_ptrs(nb_outputs_);
+        for (int i = 0; i < nb_outputs_; i++)
+            original_out_ptrs[i] = out_frames[i]->data[0];
+
         quink::ProcessResult result;
         {
             PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
@@ -723,7 +727,14 @@ public:
             return 0;
         }
 
+        int ret = checkGpuOutputIntegrity(original_out_ptrs, output_gpu_mats);
         av_frame_free(&in);
+
+        if (ret < 0) {
+            freeFrames(out_frames, nb_outputs_);
+            return ret;
+        }
+
         last_pts_ = out_frames[0]->pts;
         return outputFrames(ctx_, out_frames, nb_outputs_);
     }
@@ -773,6 +784,10 @@ public:
             }
         }
 
+        std::vector<uint8_t*> original_out_ptrs(nb_outputs_);
+        for (int i = 0; i < nb_outputs_; i++)
+            original_out_ptrs[i] = out_frames[i]->data[0];
+
         quink::ProcessResult result;
         {
             PushPopCudaCtx push_pop(ctx_, cuda_hwctx_);
@@ -788,6 +803,12 @@ public:
         if (result == quink::ProcessResult::TryAgain) {
             freeFrames(out_frames, nb_outputs_);
             return 0;
+        }
+
+        int ret = checkGpuOutputIntegrity(original_out_ptrs, output_gpu_mats);
+        if (ret < 0) {
+            freeFrames(out_frames, nb_outputs_);
+            return ret;
         }
 
         last_pts_ = out_frames[0]->pts;
@@ -848,6 +869,32 @@ private:
     quink::CudaProcessPlugin *plugin_;
     AVCUDADeviceContext *cuda_hwctx_ = nullptr;
     cv::cuda::Stream cuda_stream_;
+
+
+    /**
+     * Check that plugin did not reassign output GpuMat pointers.
+     *
+     * Unlike CPU cv::Mat where pass-through (output = input) is allowed,
+     * CUDA GpuMat pass-through is NOT supported because each AVFrame's
+     * GPU buffer is tied to its own hw_frames_ctx pool.  Swapping
+     * hw_frames_ctx is invalid, and implicit memcpy is too magical.
+     *
+     * Plugins must explicitly copy data: input.copyTo(output, stream).
+     */
+    int checkGpuOutputIntegrity(
+            const std::vector<uint8_t*> &original_out_ptrs,
+            const std::vector<cv::cuda::GpuMat> &output_gpu_mats) {
+        for (int i = 0; i < nb_outputs_; i++) {
+            if (output_gpu_mats[i].data != original_out_ptrs[i]) {
+                av_log(ctx_, AV_LOG_ERROR,
+                       "CUDA output %d: GpuMat reassignment detected. "
+                       "Pass-through (output = input) is not supported for CUDA plugins. "
+                       "Use input.copyTo(output, stream) instead.\n", i);
+                return AVERROR(EINVAL);
+            }
+        }
+        return 0;
+    }
 };
 #endif /* CONFIG_CUDA */
 

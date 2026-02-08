@@ -271,9 +271,12 @@ public:
      *
      * Allowed usage for outputs:
      *   1. Write directly to output buffer: input.copyTo(output, stream)
-     *   2. Zero-copy pass-through: output = input
+     *   2. Use OpenCV CUDA functions that write into output in-place
      *
      * NOT allowed (will cause error):
+     *   - output = input (pass-through is NOT supported for CUDA plugins
+     *     because each output buffer is tied to its own hw_frames_ctx pool;
+     *     use input.copyTo(output, stream) for pass-through semantics)
      *   - output = input.clone() (defeats zero-copy, use copyTo instead)
      *   - output.create(...) or any reallocation
      *   - Saving a reference to output beyond process() lifetime
@@ -281,7 +284,7 @@ public:
      *     downstream immediately after process() returns)
      *
      * @param inputs   Input cv::cuda::GpuMat images (zero-copy from CUDA AVFrame, refcount tied.
-     *                 Safe to save a reference for buffering / pass-through)
+     *                 Safe to save a reference for buffering)
      * @param outputs  Output cv::cuda::GpuMat images (pre-allocated GPU buffer, NO refcount.
      *                 Only valid during this process() call. Do NOT save references)
      * @param stream   CUDA stream for async operations (from FFmpeg's CUDA device context)
