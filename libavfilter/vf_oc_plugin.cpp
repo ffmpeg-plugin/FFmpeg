@@ -94,6 +94,7 @@ static const PixFmtMap *mapFromAvFmt(enum AVPixelFormat fmt)
     return nullptr;
 }
 
+#if CONFIG_CUDA
 static AVPixelFormat mapToAvFmt(quink::QPixelFormat pix_fmt)
 {
     for (int i = 0; pix_fmt_map[i].av_fmt != AV_PIX_FMT_NONE; i++) {
@@ -103,6 +104,7 @@ static AVPixelFormat mapToAvFmt(quink::QPixelFormat pix_fmt)
 
     return AV_PIX_FMT_NONE;
 }
+#endif
 
 static int mapToCvType(enum AVPixelFormat fmt)
 {
@@ -169,21 +171,6 @@ public:
 
 #if CONFIG_CUDA
 /**
- * Wrap a CUDA AVFrame into a cv::cuda::GpuMat (zero-copy view).
- *
- * If tie_refcount is true, the returned GpuMat holds a reference to the
- * AVFrame via a custom allocator, keeping the CUDA buffer alive as long
- * as any copy of the GpuMat exists.  Used for INPUT frames so that
- * plugins can safely save a reference (e.g., for zero-copy pass-through).
- *
- * If tie_refcount is false, the returned GpuMat is a lightweight view
- * with no ownership semantics.  Used for OUTPUT frames whose underlying
- * AVFrame will be sent downstream immediately after process() returns.
- * The plugin must NOT save a reference to such a GpuMat.
- */
-static cv::cuda::GpuMat wrapCudaFrame(AVFrame *frame, bool tie_refcount);
-
-/**
  * Custom GpuMat allocator that ties GpuMat lifetime to AVFrame refcount.
  * Only used internally by wrapCudaFrame(frame, true).
  */
@@ -211,6 +198,19 @@ public:
     };
 };
 
+/**
+ * Wrap a CUDA AVFrame into a cv::cuda::GpuMat (zero-copy view).
+ *
+ * If tie_refcount is true, the returned GpuMat holds a reference to the
+ * AVFrame via a custom allocator, keeping the CUDA buffer alive as long
+ * as any copy of the GpuMat exists.  Used for INPUT frames so that
+ * plugins can safely save a reference (e.g., for zero-copy pass-through).
+ *
+ * If tie_refcount is false, the returned GpuMat is a lightweight view
+ * with no ownership semantics.  Used for OUTPUT frames whose underlying
+ * AVFrame will be sent downstream immediately after process() returns.
+ * The plugin must NOT save a reference to such a GpuMat.
+ */
 static cv::cuda::GpuMat wrapCudaFrame(AVFrame *frame, bool tie_refcount) {
     if (!frame || frame->format != AV_PIX_FMT_CUDA || !frame->data[0])
         return cv::cuda::GpuMat();
