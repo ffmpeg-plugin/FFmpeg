@@ -28,7 +28,7 @@
 #include <vector>
 #include <string>
 
-#define QUINK_OC_PLUGIN_API_VERSION 1
+#define QUINK_OC_PLUGIN_API_VERSION 2
 
 namespace quink {
 
@@ -85,6 +85,59 @@ enum class ProcessResult : int {
     TryAgain  = 1,    ///< Success, but output not ready yet
     Error     = -1,   ///< Processing error
 };
+
+/**
+ * Output frame descriptor template.
+ *
+ * Contains the output image buffer plus an optional reference to an input frame.
+ * The ref_frame allows the plugin to indicate which input frame's metadata
+ * (pts, side data) should be associated with this output frame.
+ *
+ * This solves the timestamp mismatch problem when plugins buffer frames:
+ * without ref_frame, a plugin that returns TryAgain for frames 1-2 and Ok
+ * for frame 3 would get frame 3's timestamp on the output, even though
+ * the output image corresponds to frame 1.
+ *
+ * @tparam FrameType  cv::Mat for CPU plugins, cv::cuda::GpuMat for CUDA plugins
+ */
+template <typename FrameType>
+struct OutputFrame {
+    FrameType frame;       ///< Output image (pre-allocated by FFmpeg, write into it)
+
+    /**
+     * Optional reference to an input frame for timestamp/metadata.
+     *
+     * Set this to a previously received input frame (from any earlier
+     * process() call) to copy that input's timestamp and side data to
+     * this output frame.
+     *
+     * If left empty (default), the current call's input frame is used.
+     *
+     * Usage: Save input frames (they are reference-counted, cheap to copy)
+     * and assign the appropriate one here when producing output.
+     *
+     * Example (frame averaging with correct timestamps):
+     * @code
+     *   ProcessResult process(const vector<Mat> &inputs,
+     *                         vector<ProcessOutput> &outputs) {
+     *       buffer_.push_back(inputs[0]);  // ref-count copy, keeps pixels alive
+     *       if (buffer_.size() < N)
+     *           return ProcessResult::TryAgain;
+     *       computeAverage(buffer_, outputs[0].frame);
+     *       outputs[0].ref_frame = buffer_.front(); // use first frame's pts
+     *       buffer_.pop_front();
+     *       return ProcessResult::Ok;
+     *   }
+     * @endcode
+     */
+    FrameType ref_frame;
+};
+
+/// CPU output frame descriptor (cv::Mat based)
+using ProcessOutput = OutputFrame<cv::Mat>;
+
+/// CUDA output frame descriptor (cv::cuda::GpuMat based)
+using CudaProcessOutput = OutputFrame<cv::cuda::GpuMat>;
 
 /**
  * Detection results structure following OpenCV DNN conventions.
@@ -188,27 +241,34 @@ public:
      *
      * This method is called for each set of input frames.
      *
-     * Allowed usage for outputs:
-     *   1. Write directly to output buffer: input.copyTo(output)
-     *   2. Zero-copy pass-through: output = input
+     * Allowed usage for outputs[i].frame:
+     *   1. Write directly to output buffer: input.copyTo(outputs[i].frame)
+     *   2. Zero-copy pass-through: outputs[i].frame = input
      *
      * NOT allowed (will cause error):
-     *   - output = input.clone() (defeats zero-copy, use copyTo instead)
-     *   - output.create(...) or any reallocation
-     *   - Saving a reference to output beyond process() lifetime
+     *   - outputs[i].frame = input.clone() (defeats zero-copy, use copyTo instead)
+     *   - outputs[i].frame.create(...) or any reallocation
+     *   - Saving a reference to outputs[i].frame beyond process() lifetime
      *     (the underlying buffer is owned by FFmpeg and will be sent
      *     downstream immediately after process() returns)
      *
+     * Timestamp association (outputs[i].ref_frame):
+     *   When returning Ok after one or more TryAgain calls, set
+     *   outputs[i].ref_frame to the input Mat that this output corresponds to.
+     *   This allows FFmpeg to use the correct timestamp and side data.
+     *   If ref_frame is left empty, the current call's input is used.
+     *
+     *   Input Mats are reference-counted and safe to save across calls.
+     *
      * @param inputs   Input cv::Mat images (zero-copy from FFmpeg, refcount tied to AVFrame.
      *                 Safe to save a reference for buffering / pass-through)
-     * @param outputs  Output cv::Mat images (pre-allocated buffer, NO refcount.
-     *                 Only valid during this process() call. Do NOT save references)
+     * @param outputs  Output descriptors (pre-allocated buffer in .frame, optional .ref_frame)
      * @return ProcessResult::Ok:       success, output ready
      *         ProcessResult::TryAgain: success, buffered, no output yet
      *         ProcessResult::Error:    processing error
      */
     virtual ProcessResult process(const std::vector<cv::Mat> &inputs,
-                                  std::vector<cv::Mat> &outputs) = 0;
+                                  std::vector<ProcessOutput> &outputs) = 0;
 
     /**
      * Flush buffered frames at end of stream
@@ -217,10 +277,14 @@ public:
      * buffered frames. This method may be called multiple times until it
      * returns false (no more frames to output).
      *
-     * @param outputs  Output buffer to write flushed frame into
+     * Set outputs[i].ref_frame to associate each output with the correct
+     * input frame's timestamp. If left empty, an auto-incrementing timestamp
+     * is used (which may not be ideal).
+     *
+     * @param outputs  Output descriptors to write flushed frame into
      * @return true if a frame was output, false if no more frames
      */
-    virtual bool flush(std::vector<cv::Mat> &outputs) = 0;
+    virtual bool flush(std::vector<ProcessOutput> &outputs) = 0;
 
     /**
      * Configure plugin with all input/output dimensions
@@ -269,31 +333,38 @@ public:
      * This method is called for each set of input frames.
      * All data remains on GPU - no CPU<->GPU transfers.
      *
-     * Allowed usage for outputs:
-     *   1. Write directly to output buffer: input.copyTo(output, stream)
-     *   2. Use OpenCV CUDA functions that write into output in-place
+     * Allowed usage for outputs[i].frame:
+     *   1. Write directly to output buffer: input.copyTo(outputs[i].frame, stream)
+     *   2. Use OpenCV CUDA functions that write into outputs[i].frame in-place
      *
      * NOT allowed (will cause error):
-     *   - output = input (pass-through is NOT supported for CUDA plugins
+     *   - outputs[i].frame = input (pass-through is NOT supported for CUDA plugins
      *     because each output buffer is tied to its own hw_frames_ctx pool;
-     *     use input.copyTo(output, stream) for pass-through semantics)
-     *   - output = input.clone() (defeats zero-copy, use copyTo instead)
-     *   - output.create(...) or any reallocation
-     *   - Saving a reference to output beyond process() lifetime
+     *     use input.copyTo(outputs[i].frame, stream) for pass-through semantics)
+     *   - outputs[i].frame = input.clone() (defeats zero-copy, use copyTo instead)
+     *   - outputs[i].frame.create(...) or any reallocation
+     *   - Saving a reference to outputs[i].frame beyond process() lifetime
      *     (the underlying buffer is owned by FFmpeg and will be sent
      *     downstream immediately after process() returns)
      *
+     * Timestamp association (outputs[i].ref_frame):
+     *   When returning Ok after one or more TryAgain calls, set
+     *   outputs[i].ref_frame to the input GpuMat that this output corresponds to.
+     *   This allows FFmpeg to use the correct timestamp and side data.
+     *   If ref_frame is left empty, the current call's input is used.
+     *
+     *   Input GpuMats are reference-counted and safe to save across calls.
+     *
      * @param inputs   Input cv::cuda::GpuMat images (zero-copy from CUDA AVFrame, refcount tied.
      *                 Safe to save a reference for buffering)
-     * @param outputs  Output cv::cuda::GpuMat images (pre-allocated GPU buffer, NO refcount.
-     *                 Only valid during this process() call. Do NOT save references)
+     * @param outputs  Output descriptors (pre-allocated GPU buffer in .frame, optional .ref_frame)
      * @param stream   CUDA stream for async operations (from FFmpeg's CUDA device context)
      * @return ProcessResult::Ok:       success, output ready
      *         ProcessResult::TryAgain: success, buffered, no output yet
      *         ProcessResult::Error:    processing error
      */
     virtual ProcessResult process(const std::vector<cv::cuda::GpuMat> &inputs,
-                                  std::vector<cv::cuda::GpuMat> &outputs,
+                                  std::vector<CudaProcessOutput> &outputs,
                                   cv::cuda::Stream &stream) = 0;
 
     /**
@@ -303,11 +374,15 @@ public:
      * buffered frames. This method may be called multiple times until it
      * returns false (no more frames to output).
      *
-     * @param outputs  Output buffer to write flushed frame into
+     * Set outputs[i].ref_frame to associate each output with the correct
+     * input frame's timestamp. If left empty, an auto-incrementing timestamp
+     * is used.
+     *
+     * @param outputs  Output descriptors to write flushed frame into
      * @param stream   CUDA stream for async operations
      * @return true if a frame was output, false if no more frames
      */
-    virtual bool flush(std::vector<cv::cuda::GpuMat> &outputs,
+    virtual bool flush(std::vector<CudaProcessOutput> &outputs,
                        cv::cuda::Stream &stream) = 0;
 
     /**
