@@ -1,0 +1,922 @@
+cmake_minimum_required(VERSION 3.20)
+project(FFmpeg VERSION 8.1 LANGUAGES C CXX ASM)
+
+# =============================================================================
+# Project Configuration
+# =============================================================================
+
+set(FFMPEG_CONFIGURATION "CMake build")
+
+# =============================================================================
+# Build Options
+# =============================================================================
+
+# License options
+option(ENABLE_GPL       "Enable GPL licensed code"      OFF)
+option(ENABLE_VERSION3  "Enable (L)GPLv3 code"          OFF)
+option(ENABLE_NONFREE   "Enable nonfree code"           OFF)
+
+# Build type options
+option(ENABLE_SHARED    "Build shared libraries"        OFF)
+option(ENABLE_STATIC    "Build static libraries"        ON)
+option(ENABLE_DEBUG     "Enable debug symbols"          ON)
+option(ENABLE_OPTIMIZATIONS "Enable compiler optimizations" ON)
+
+# Library toggles
+option(ENABLE_AVDEVICE   "Build libavdevice"   ON)
+option(ENABLE_AVCODEC    "Build libavcodec"    ON)
+option(ENABLE_AVFORMAT   "Build libavformat"   ON)
+option(ENABLE_AVFILTER   "Build libavfilter"   ON)
+option(ENABLE_SWSCALE    "Build libswscale"    ON)
+option(ENABLE_SWRESAMPLE "Build libswresample" ON)
+
+# Tool toggles
+option(ENABLE_FFMPEG  "Build ffmpeg executable"  ON)
+option(ENABLE_FFPLAY  "Build ffplay executable"  ON)
+option(ENABLE_FFPROBE "Build ffprobe executable" ON)
+
+# Assembly options
+option(ENABLE_ASM "Enable assembly optimizations" ON)
+
+# =============================================================================
+# CMake Module Path
+# =============================================================================
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+# =============================================================================
+# Platform and Architecture Detection
+# =============================================================================
+
+include(FFmpegArch)
+
+# =============================================================================
+# Feature Detection
+# =============================================================================
+
+include(FFmpegFeatureDetect)
+
+# =============================================================================
+# External Libraries
+# =============================================================================
+
+include(FFmpegExternalLibs)
+
+# =============================================================================
+# Find Required Packages
+# =============================================================================
+
+# Threads
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+find_package(Threads REQUIRED)
+
+# Set thread-related config variables
+if(CMAKE_USE_PTHREADS_INIT)
+    set(HAVE_PTHREADS 1)
+    set(HAVE_THREADS 1)
+elseif(CMAKE_USE_WIN32_THREADS_INIT)
+    set(HAVE_PTHREADS 0)
+    set(HAVE_W32THREADS 1)
+    set(HAVE_THREADS 1)
+else()
+    set(HAVE_PTHREADS 0)
+    set(HAVE_THREADS 0)
+endif()
+set(HAVE_OS2THREADS 0)
+
+# =============================================================================
+# Compiler Flags
+# =============================================================================
+
+include(FFmpegCompilerFlags)
+
+# =============================================================================
+# Utilities
+# =============================================================================
+
+include(FFmpegUtils)
+
+# =============================================================================
+# Component Selection
+# =============================================================================
+
+# Set library enable flags for FFmpegComponents module
+set(FFMPEG_ENABLE_avutil     1)  # Always enabled
+set(FFMPEG_ENABLE_avcodec    ${ENABLE_AVCODEC})
+set(FFMPEG_ENABLE_avformat   ${ENABLE_AVFORMAT})
+set(FFMPEG_ENABLE_avfilter   ${ENABLE_AVFILTER})
+set(FFMPEG_ENABLE_avdevice   ${ENABLE_AVDEVICE})
+set(FFMPEG_ENABLE_swscale    ${ENABLE_SWSCALE})
+set(FFMPEG_ENABLE_swresample ${ENABLE_SWRESAMPLE})
+
+include(FFmpegComponents)
+
+# =============================================================================
+# Essential Variables
+# =============================================================================
+
+# Year for copyright
+string(TIMESTAMP CONFIG_THIS_YEAR "%Y")
+
+# License string
+if(ENABLE_NONFREE)
+    set(FFMPEG_LICENSE "nonfree and unredistributable")
+elseif(ENABLE_GPL AND ENABLE_VERSION3)
+    set(FFMPEG_LICENSE "GPL version 3 or later")
+elseif(ENABLE_GPL)
+    set(FFMPEG_LICENSE "GPL version 2 or later")
+elseif(ENABLE_VERSION3)
+    set(FFMPEG_LICENSE "LGPL version 3 or later")
+else()
+    set(FFMPEG_LICENSE "LGPL version 2.1 or later")
+endif()
+
+# Type sizes
+include(CheckTypeSize)
+check_type_size("long" SIZEOF_LONG)
+check_type_size("int" SIZEOF_INT)
+check_type_size("short" SIZEOF_SHORT)
+check_type_size("void*" SIZEOF_VOIDP)
+
+# Network/socket struct detection
+include(CheckCSourceCompiles)
+check_c_source_compiles("
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    int main(void) { socklen_t x = 0; (void)x; return 0; }
+" HAVE_SOCKLEN_T)
+if(NOT HAVE_SOCKLEN_T)
+    set(HAVE_SOCKLEN_T 0)
+endif()
+
+check_c_source_compiles("
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netdb.h>
+    int main(void) { struct addrinfo ai; (void)ai; return 0; }
+" HAVE_STRUCT_ADDRINFO)
+if(NOT HAVE_STRUCT_ADDRINFO)
+    set(HAVE_STRUCT_ADDRINFO 0)
+endif()
+
+check_c_source_compiles("
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    int main(void) { struct sockaddr_storage ss; (void)ss; return 0; }
+" HAVE_STRUCT_SOCKADDR_STORAGE)
+if(NOT HAVE_STRUCT_SOCKADDR_STORAGE)
+    set(HAVE_STRUCT_SOCKADDR_STORAGE 0)
+endif()
+
+check_c_source_compiles("
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    int main(void) { struct sockaddr_in6 s6; (void)s6; return 0; }
+" HAVE_STRUCT_SOCKADDR_IN6)
+if(NOT HAVE_STRUCT_SOCKADDR_IN6)
+    set(HAVE_STRUCT_SOCKADDR_IN6 0)
+endif()
+
+check_c_source_compiles("
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    int main(void) { struct sockaddr sa; (void)sa.sa_len; return 0; }
+" HAVE_STRUCT_SOCKADDR_SA_LEN)
+if(NOT HAVE_STRUCT_SOCKADDR_SA_LEN)
+    set(HAVE_STRUCT_SOCKADDR_SA_LEN 0)
+endif()
+
+# Inline ASM support
+include(CheckCSourceCompiles)
+check_c_source_compiles("
+    int main(void) {
+        __asm__ volatile(\"\" ::: \"memory\");
+        return 0;
+    }
+" HAVE_INLINE_ASM)
+if(NOT HAVE_INLINE_ASM)
+    set(HAVE_INLINE_ASM 0)
+endif()
+
+# X86ASM (NASM) support - only applicable on x86/x86_64 architectures
+find_program(NASM_EXECUTABLE nasm)
+find_program(YASM_EXECUTABLE yasm)
+if((NASM_EXECUTABLE OR YASM_EXECUTABLE) AND ARCH_X86)
+    set(HAVE_X86ASM 1)
+    set(NASM_FOUND TRUE)
+    if(NASM_EXECUTABLE)
+        set(NASM_PROGRAM ${NASM_EXECUTABLE})
+        set(CMAKE_ASM_NASM_COMPILER ${NASM_EXECUTABLE})
+    else()
+        set(NASM_PROGRAM ${YASM_EXECUTABLE})
+        set(CMAKE_ASM_NASM_COMPILER ${YASM_EXECUTABLE})
+    endif()
+    # Enable NASM language support at top level (must be done here, not in subdirs)
+    enable_language(ASM_NASM)
+    # Set NASM flags based on architecture and platform
+    if(ARCH_X86_64)
+        set(NASM_ARCH_FLAGS "-DARCH_X86_64=1 -DARCH_X86_32=0")
+    else()
+        set(NASM_ARCH_FLAGS "-DARCH_X86_64=0 -DARCH_X86_32=1")
+    endif()
+    if(APPLE)
+        set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f macho64")
+    elseif(WIN32)
+        set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f win64")
+    else()
+        set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f elf64")
+    endif()
+    # Add include path for config.h and ffmpeg source
+    # -Pconfig.asm: pre-include config.asm before each .asm file (like FFmpeg's Makefile)
+    set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -I${CMAKE_BINARY_DIR}/ -I${CMAKE_SOURCE_DIR}/ -Pconfig.asm")
+    message(STATUS "NASM found: ${NASM_PROGRAM}, flags: ${CMAKE_ASM_NASM_FLAGS}")
+
+    # Helper function: for each .asm source file in a list, add its directory
+    # as a NASM include path via COMPILE_FLAGS property.
+    # This mimics FFmpeg Makefile's -I$(<D)/ which adds the source file's directory.
+    function(nasm_add_source_dir_includes target)
+        get_target_property(sources ${target} SOURCES)
+        foreach(src IN LISTS sources)
+            if(src MATCHES "\\.asm$")
+                get_filename_component(src_dir "${src}" DIRECTORY)
+                if(src_dir)
+                    # src_dir may be relative; make it absolute
+                    if(NOT IS_ABSOLUTE "${src_dir}")
+                        set(src_dir "${CMAKE_CURRENT_SOURCE_DIR}/${src_dir}")
+                    endif()
+                    set_property(SOURCE "${src}" APPEND_STRING
+                        PROPERTY COMPILE_FLAGS " -I${src_dir}/")
+                endif()
+            endif()
+        endforeach()
+    endfunction()
+else()
+    set(HAVE_X86ASM 0)
+    set(NASM_FOUND FALSE)
+endif()
+
+# Symbol versioning
+set(HAVE_SYMVER 0)
+
+# DOS paths (Windows only)
+if(WIN32)
+    set(HAVE_DOS_PATHS 1)
+    set(HAVE_LIBC_MSVCRT 1)
+    set(HAVE_UWP 0)
+    set(HAVE_WINRT 0)
+else()
+    set(HAVE_DOS_PATHS 0)
+    set(HAVE_LIBC_MSVCRT 0)
+    set(HAVE_UWP 0)
+    set(HAVE_WINRT 0)
+endif()
+
+# Runtime CPU detection
+set(CONFIG_RUNTIME_CPUDETECT 1)
+
+# Safe bitstream reader
+set(CONFIG_SAFE_BITSTREAM_READER 1)
+
+# Build type flags
+if(ENABLE_SHARED)
+    set(CONFIG_SHARED 1)
+    set(CONFIG_STATIC 0)
+else()
+    set(CONFIG_SHARED 0)
+    set(CONFIG_STATIC 1)
+endif()
+
+# Misc config
+set(CONFIG_SMALL 0)
+set(CONFIG_GRAY 0)
+set(CONFIG_SWSCALE_ALPHA 1)
+set(CONFIG_HARDCODED_TABLES 0)
+set(CONFIG_FTRAPV 0)
+set(CONFIG_MEMORY_POISONING 0)
+set(CONFIG_NEON_CLOBBER_TEST 0)
+set(CONFIG_XMM_CLOBBER_TEST 0)
+set(CONFIG_VALGRIND_BACKTRACE 0)
+set(CONFIG_OSSFUZZ 0)
+# macOS requires PIC for all code (shared libraries and executables)
+# Linux shared libraries also need PIC; for static-only Linux builds it's optional
+if(APPLE OR (UNIX AND NOT APPLE AND BUILD_SHARED_LIBS))
+    set(CONFIG_PIC 1)
+else()
+    set(CONFIG_PIC 0)
+endif()
+set(CONFIG_THUMB 0)
+set(CONFIG_UNSTABLE 0)
+set(CONFIG_AUTODETECT 1)
+set(CONFIG_LARGE_TESTS 0)
+set(CONFIG_LINUX_PERF 0)
+set(CONFIG_MACOS_KPERF 0)
+set(CONFIG_SHADER_COMPRESSION 0)
+set(CONFIG_RESOURCE_COMPRESSION 0)
+
+# Documentation
+set(CONFIG_DOC 0)
+set(CONFIG_HTMLPAGES 0)
+set(CONFIG_MANPAGES 0)
+set(CONFIG_PODPAGES 0)
+set(CONFIG_TXTPAGES 0)
+
+# Examples
+set(CONFIG_AVIO_HTTP_SERVE_FILES_EXAMPLE 0)
+set(CONFIG_AVIO_LIST_DIR_EXAMPLE 0)
+set(CONFIG_AVIO_READ_CALLBACK_EXAMPLE 0)
+set(CONFIG_DECODE_AUDIO_EXAMPLE 0)
+set(CONFIG_DECODE_FILTER_AUDIO_EXAMPLE 0)
+set(CONFIG_DECODE_FILTER_VIDEO_EXAMPLE 0)
+set(CONFIG_DECODE_VIDEO_EXAMPLE 0)
+set(CONFIG_DEMUX_DECODE_EXAMPLE 0)
+set(CONFIG_ENCODE_AUDIO_EXAMPLE 0)
+set(CONFIG_ENCODE_VIDEO_EXAMPLE 0)
+set(CONFIG_EXTRACT_MVS_EXAMPLE 0)
+set(CONFIG_FILTER_AUDIO_EXAMPLE 0)
+set(CONFIG_HW_DECODE_EXAMPLE 0)
+set(CONFIG_MUX_EXAMPLE 0)
+set(CONFIG_QSV_DECODE_EXAMPLE 0)
+set(CONFIG_REMUX_EXAMPLE 0)
+set(CONFIG_RESAMPLE_AUDIO_EXAMPLE 0)
+set(CONFIG_SCALE_VIDEO_EXAMPLE 0)
+set(CONFIG_SHOW_METADATA_EXAMPLE 0)
+set(CONFIG_TRANSCODE_AAC_EXAMPLE 0)
+set(CONFIG_TRANSCODE_EXAMPLE 0)
+set(CONFIG_VAAPI_ENCODE_EXAMPLE 0)
+set(CONFIG_VAAPI_TRANSCODE_EXAMPLE 0)
+set(CONFIG_QSV_TRANSCODE_EXAMPLE 0)
+
+# FreeType2 detection (for vf_drawtext filter)
+find_package(Freetype QUIET)
+if(NOT Freetype_FOUND)
+    # Try pkg-config fallback
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FREETYPE QUIET IMPORTED_TARGET freetype2)
+        if(FREETYPE_FOUND)
+            set(FREETYPE_INCLUDE_DIRS ${FREETYPE_INCLUDE_DIRS})
+            set(FREETYPE_LIBRARIES ${FREETYPE_LIBRARIES})
+            message(STATUS "Found FreeType2 via pkg-config: ${FREETYPE_VERSION}")
+        endif()
+    endif()
+else()
+    message(STATUS "Found FreeType2: ${FREETYPE_VERSION_STRING}")
+endif()
+
+# HarfBuzz detection (for vf_drawtext filter text shaping)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(HARFBUZZ QUIET IMPORTED_TARGET harfbuzz)
+    if(HARFBUZZ_FOUND)
+        message(STATUS "Found HarfBuzz: ${HARFBUZZ_VERSION}")
+    endif()
+endif()
+
+# Vulkan detection
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND)
+    set(CONFIG_VULKAN 1)
+    message(STATUS "Found Vulkan: ${Vulkan_VERSION}")
+else()
+    set(CONFIG_VULKAN 0)
+endif()
+set(CONFIG_VULKAN_STATIC 0)
+set(CONFIG_VULKAN_1_4 0)
+set(CONFIG_VULKAN_ENCODE 0)
+
+# glslang detection (SPIR-V compiler for Vulkan shaders)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(GLSLANG QUIET glslang)
+    if(GLSLANG_FOUND)
+        set(CONFIG_LIBGLSLANG 1)
+        set(CONFIG_LIBSHADERC 0)
+        message(STATUS "Found glslang: ${GLSLANG_VERSION}")
+    else()
+        # Try shaderc
+        pkg_check_modules(SHADERC QUIET shaderc)
+        if(SHADERC_FOUND)
+            set(CONFIG_LIBSHADERC 1)
+            set(CONFIG_LIBGLSLANG 0)
+            message(STATUS "Found shaderc: ${SHADERC_VERSION}")
+        else()
+            set(CONFIG_LIBGLSLANG 0)
+            set(CONFIG_LIBSHADERC 0)
+        endif()
+    endif()
+else()
+    set(CONFIG_LIBGLSLANG 0)
+    set(CONFIG_LIBSHADERC 0)
+endif()
+
+# Internal features
+set(CONFIG_DWT 1)
+set(CONFIG_ERROR_RESILIENCE 1)
+set(CONFIG_FAAN 1)
+set(CONFIG_FAST_UNALIGNED ${HAVE_FAST_UNALIGNED})
+set(CONFIG_IAMF 1)
+set(CONFIG_LSP 1)
+set(CONFIG_PIXELUTILS 1)
+set(CONFIG_NETWORK 1)
+
+# Assembler features (defaults, may be overridden by arch detection)
+foreach(var AS_ARCH_DIRECTIVE AS_ARCHEXT_CRC_DIRECTIVE AS_ARCHEXT_DOTPROD_DIRECTIVE
+            AS_ARCHEXT_I8MM_DIRECTIVE AS_ARCHEXT_SVE_DIRECTIVE AS_ARCHEXT_SVE2_DIRECTIVE
+            AS_ARCHEXT_SME_DIRECTIVE AS_ARCHEXT_SME_I16I64_DIRECTIVE AS_ARCHEXT_SME2_DIRECTIVE
+            AS_DN_DIRECTIVE AS_FPU_DIRECTIVE AS_FUNC AS_OBJECT_ARCH ASM_MOD_Q
+            BLOCKS_EXTENSION EBP_AVAILABLE EBX_AVAILABLE GNU_AS GNU_WINDRES IBM_ASM
+            INLINE_ASM_DIRECT_SYMBOL_REFS INLINE_ASM_LABELS INLINE_ASM_NONLOCAL_LABELS
+            PRAGMA_DEPRECATED RSYNC_CONTIMEOUT SYMVER_ASM_LABEL SYMVER_GNU_ASM
+            VFP_ARGS XFORM_ASM XMM_CLOBBERS)
+    if(NOT HAVE_${var})
+        set(HAVE_${var} 0)
+    endif()
+endforeach()
+
+# macOS/iOS specific features
+foreach(var DPI_AWARENESS_CONTEXT IDXGIOUTPUT5
+            __X_ABI_CWINDOWS_CGRAPHICS_CCAPTURE_CIGRAPHICSCAPTURESESSION5
+            IDIRECT3DDXGIINTERFACEACCESS
+            KCMVIDEOCODECTYPE_HEVC KCMVIDEOCODECTYPE_HEVCWITHALPHA
+            KCMVIDEOCODECTYPE_VP9 KCMVIDEOCODECTYPE_AV1
+            KCVPIXELFORMATTYPE_420YPCBCR10BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_422YPCBCR8BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_422YPCBCR10BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_422YPCBCR16BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_444YPCBCR8BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_444YPCBCR10BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_444YPCBCR16BIPLANARVIDEORANGE
+            KCVPIXELFORMATTYPE_422YPCBCR8_YUVS
+            KCVIMAGEBUFFERTRANSFERFUNCTION_SMPTE_ST_2084_PQ
+            KCVIMAGEBUFFERTRANSFERFUNCTION_ITU_R_2100_HLG
+            KCVIMAGEBUFFERTRANSFERFUNCTION_LINEAR
+            KCVIMAGEBUFFERYCBCRMATRIX_ITU_R_2020
+            KCVIMAGEBUFFERCOLORPRIMARIES_ITU_R_2020
+            KCVIMAGEBUFFERTRANSFERFUNCTION_ITU_R_2020
+            KCVIMAGEBUFFERTRANSFERFUNCTION_SMPTE_ST_428_1
+            KVTQPMODULATIONLEVEL_DEFAULT SECPKGCONTEXT_KEYINGMATERIALINFO)
+    if(NOT HAVE_${var})
+        set(HAVE_${var} 0)
+    endif()
+endforeach()
+
+# Struct members
+foreach(var SOCKLEN_T STRUCT_ADDRINFO STRUCT_GROUP_SOURCE_REQ STRUCT_IP_MREQ_SOURCE
+            STRUCT_IPV6_MREQ STRUCT_MSGHDR_MSG_FLAGS STRUCT_POLLFD STRUCT_RUSAGE_RU_MAXRSS
+            STRUCT_SCTP_EVENT_SUBSCRIBE STRUCT_SOCKADDR_IN6 STRUCT_SOCKADDR_SA_LEN
+            STRUCT_SOCKADDR_STORAGE STRUCT_STAT_ST_MTIM_TV_NSEC
+            STRUCT_V4L2_FRMIVALENUM_DISCRETE STRUCT_MFXCONFIGINTERFACE)
+    if(NOT HAVE_${var})
+        set(HAVE_${var} 0)
+    endif()
+endforeach()
+
+# External tools
+foreach(var GZIP IOCTL_POSIX LIBDRM_GETFB2 MAKEINFO MAKEINFO_HTML
+            OPENCL_D3D11 OPENCL_DRM_ARM OPENCL_DRM_BEIGNET OPENCL_DXVA2
+            OPENCL_VAAPI_BEIGNET OPENCL_VAAPI_INTEL_MEDIA OPENCL_VIDEOTOOLBOX
+            PERL POD2MAN TEXI2HTML XMLLINT ZLIB_GZIP OPENVINO2)
+    if(NOT HAVE_${var})
+        set(HAVE_${var} 0)
+    endif()
+endforeach()
+
+# Libraries
+if(UNIX AND NOT APPLE)
+    set(HAVE_M 1)
+    set(HAVE_LIBDL 1)
+elseif(APPLE)
+    set(HAVE_M 1)
+    set(HAVE_LIBDL 0)
+else()
+    set(HAVE_M 0)
+    set(HAVE_LIBDL 0)
+endif()
+
+# Intrinsics
+if(HAVE_NEON_INTRINSICS)
+    set(HAVE_INTRINSICS_NEON 1)
+else()
+    set(HAVE_INTRINSICS_NEON 0)
+endif()
+if(HAVE_SSE2_INTRINSICS)
+    set(HAVE_INTRINSICS_SSE2 1)
+else()
+    set(HAVE_INTRINSICS_SSE2 0)
+endif()
+
+# Hardware acceleration defaults
+set(CONFIG_CUDA 0)
+set(CONFIG_CUDA_NVCC 0)
+set(CONFIG_CUDA_SDK 0)
+set(CONFIG_LIBNPP 0)
+set(CONFIG_LIBMFX 0)
+set(CONFIG_LIBVPL 0)
+set(CONFIG_MMAL 0)
+set(CONFIG_OMX 0)
+set(CONFIG_OMX_RPI 0)
+set(CONFIG_OPENCL 0)
+set(CONFIG_AMF 0)
+set(CONFIG_CUDA_LLVM 0)
+set(CONFIG_CUVID 0)
+set(CONFIG_D3D11VA 0)
+set(CONFIG_D3D12VA 0)
+set(CONFIG_DXVA2 0)
+set(CONFIG_FFNVCODEC 0)
+set(CONFIG_LIBDRM 0)
+set(CONFIG_NVDEC 0)
+set(CONFIG_NVENC 0)
+set(CONFIG_VAAPI 0)
+set(CONFIG_VDPAU 0)
+set(CONFIG_VULKAN 0)
+set(CONFIG_VULKAN_STATIC 0)
+set(CONFIG_V4L2_M2M 0)
+set(CONFIG_FONTCONFIG 0)
+
+# Platform-specific hardware acceleration
+if(APPLE)
+    set(CONFIG_VIDEOTOOLBOX 1)
+    set(CONFIG_AUDIOTOOLBOX 1)
+    set(CONFIG_APPKIT 1)
+    set(CONFIG_AVFOUNDATION 1)
+    set(CONFIG_COREIMAGE 1)
+    set(CONFIG_METAL 0)
+else()
+    set(CONFIG_VIDEOTOOLBOX 0)
+    set(CONFIG_AUDIOTOOLBOX 0)
+    set(CONFIG_APPKIT 0)
+    set(CONFIG_AVFOUNDATION 0)
+    set(CONFIG_COREIMAGE 0)
+    set(CONFIG_METAL 0)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(CONFIG_VAAPI 1)
+    set(CONFIG_VDPAU 1)
+    set(CONFIG_ALSA 1)
+    set(CONFIG_V4L2_M2M 0)  # TODO: detect properly
+else()
+    set(CONFIG_ALSA 0)
+endif()
+
+if(WIN32)
+    set(CONFIG_D3D11VA 1)
+    set(CONFIG_DXVA2 1)
+    set(CONFIG_MEDIAFOUNDATION 0)
+    set(CONFIG_SCHANNEL 0)
+else()
+    set(CONFIG_MEDIAFOUNDATION 0)
+    set(CONFIG_SCHANNEL 0)
+endif()
+
+# Misc hardware/platform
+set(CONFIG_RKMPP 0)
+set(CONFIG_SNDIO 0)
+set(CONFIG_XLIB 0)
+set(CONFIG_LIBXCB 0)
+set(CONFIG_LIBXCB_SHM 0)
+set(CONFIG_LIBXCB_SHAPE 0)
+set(CONFIG_LIBXCB_XFIXES 0)
+
+# MMAL
+set(HAVE_MMAL_PARAMETER_VIDEO_MAX_NUM_CALLBACKS 0)
+
+# Section data
+set(HAVE_SECTION_DATA_REL_RO 0)
+
+# =============================================================================
+# Component Configuration Variables
+# ============================================================================
+
+# Set default values for all CONFIG_ variables
+include(FFmpegDefaults)
+
+# These are used by config.h.in template
+set(CONFIG_FILTERS 1)
+set(CONFIG_MUXERS 1)
+set(CONFIG_DEMUXERS 1)
+set(CONFIG_PROTOCOLS 1)
+
+# Protocol configuration
+set(CONFIG_TLS_PROTOCOL 1)
+set(CONFIG_DTLS_PROTOCOL 0)
+
+# Device configuration
+set(CONFIG_LAVFI_INDEV 1)
+if(APPLE)
+    set(CONFIG_AVFOUNDATION_INDEV 1)
+    set(CONFIG_AUDIOTOOLBOX_OUTDEV 1)
+else()
+    set(CONFIG_AVFOUNDATION_INDEV 0)
+    set(CONFIG_AUDIOTOOLBOX_OUTDEV 0)
+endif()
+
+# Internal codec subsystem configs (needed by config.h)
+set(CONFIG_AANDCTTABLES 1)
+set(CONFIG_AC3DSP 1)
+set(CONFIG_ADTS_HEADER 1)
+set(CONFIG_ATSC_A53 1)
+set(CONFIG_AUDIO_FRAME_QUEUE 1)
+set(CONFIG_AUDIODSP 1)
+set(CONFIG_BLOCKDSP 1)
+set(CONFIG_BSWAPDSP 1)
+set(CONFIG_CABAC 1)
+set(CONFIG_CBS 1)
+set(CONFIG_CBS_APV 1)
+set(CONFIG_CBS_AV1 1)
+set(CONFIG_CBS_H264 1)
+set(CONFIG_CBS_H265 1)
+set(CONFIG_CBS_H266 1)
+set(CONFIG_CBS_JPEG 1)
+set(CONFIG_CBS_LCEVC 0)
+set(CONFIG_CBS_MPEG2 1)
+set(CONFIG_CBS_VP8 1)
+set(CONFIG_CBS_VP9 1)
+set(CONFIG_CELP_MATH 1)
+set(CONFIG_D3D12_INTRA_REFRESH 0)
+set(CONFIG_D3D12_MOTION_ESTIMATOR 0)
+set(CONFIG_D3D12_VIDEO_PROCESS_REFERENCE_INFO 0)
+set(CONFIG_D3D12VA_ENCODE 0)
+set(CONFIG_D3D12VA_ME_PRECISION_EIGHTH_PIXEL 0)
+set(CONFIG_DEFLATE_WRAPPER ${CONFIG_ZLIB})
+set(CONFIG_DIRAC_PARSE 1)
+set(CONFIG_DNN 0)
+set(CONFIG_DOVI_RPUDEC 1)
+set(CONFIG_DOVI_RPUENC 1)
+set(CONFIG_DVPROFILE 1)
+set(CONFIG_EVCPARSE 0)
+set(CONFIG_FAANDCT 1)
+set(CONFIG_FAANIDCT 1)
+set(CONFIG_FDCTDSP 1)
+set(CONFIG_FMTCONVERT 1)
+set(CONFIG_FRAME_THREAD_ENCODER 1)
+set(CONFIG_G722DSP 1)
+set(CONFIG_GOLOMB 1)
+set(CONFIG_GPLV3 0)
+set(CONFIG_H263DSP 1)
+set(CONFIG_H264CHROMA 1)
+set(CONFIG_H264DSP 1)
+set(CONFIG_H264PARSE 1)
+set(CONFIG_H264PRED 1)
+set(CONFIG_H264QPEL 1)
+set(CONFIG_H264_SEI 1)
+set(CONFIG_HEVCPARSE 1)
+set(CONFIG_HEVC_SEI 1)
+set(CONFIG_HPELDSP 1)
+set(CONFIG_HUFFMAN 1)
+set(CONFIG_HUFFYUVDSP 1)
+set(CONFIG_HUFFYUVENCDSP 1)
+set(CONFIG_IAMFDEC 1)
+set(CONFIG_IAMFENC 1)
+set(CONFIG_IDCTDSP 1)
+set(CONFIG_INFLATE_WRAPPER ${CONFIG_ZLIB})
+set(CONFIG_INTRAX8 1)
+set(CONFIG_ISO_MEDIA 1)
+set(CONFIG_ISO_WRITER 1)
+set(CONFIG_IVIDSP 1)
+set(CONFIG_JPEGTABLES 1)
+set(CONFIG_LGPLV3 0)
+set(CONFIG_LIBX262 0)
+set(CONFIG_LIBX264_HDR10 0)
+set(CONFIG_LLAUDDSP 1)
+set(CONFIG_LLVIDDSP 1)
+set(CONFIG_LLVIDENCDSP 1)
+set(CONFIG_LPC 1)
+set(CONFIG_LZF 1)
+set(CONFIG_ME_CMP 1)
+set(CONFIG_MPEG_ER 1)
+set(CONFIG_MPEGAUDIO 1)
+set(CONFIG_MPEGAUDIODSP 1)
+set(CONFIG_MPEGAUDIOHEADER 1)
+set(CONFIG_MPEG4AUDIO 1)
+set(CONFIG_MPEGVIDEO 1)
+set(CONFIG_MPEGVIDEODEC 1)
+set(CONFIG_MPEGVIDEOENC 1)
+set(CONFIG_MPEGVIDEOENCDSP 1)
+set(CONFIG_MSMPEG4DEC 1)
+set(CONFIG_MSMPEG4ENC 1)
+set(CONFIG_MSS34DSP 1)
+set(CONFIG_PIXBLOCKDSP 1)
+set(CONFIG_QPELDSP 1)
+set(CONFIG_QSV 0)
+set(CONFIG_QSVDEC 0)
+set(CONFIG_QSVENC 0)
+set(CONFIG_QSVVPP 0)
+set(CONFIG_RANGECODER 1)
+set(CONFIG_RIFFDEC 1)
+set(CONFIG_RIFFENC 1)
+set(CONFIG_RTPDEC 1)
+set(CONFIG_RTPENC_CHAIN 1)
+set(CONFIG_RV34DSP 1)
+set(CONFIG_SCENE_SAD 1)
+set(CONFIG_SINEWIN 1)
+set(CONFIG_SMPTE_436M 1)
+set(CONFIG_SNAPPY 0)
+set(CONFIG_SRTP 1)
+set(CONFIG_STARTCODE 1)
+set(CONFIG_TEXTUREDSP 1)
+set(CONFIG_TEXTUREDSPENC 1)
+set(CONFIG_TPELDSP 1)
+set(CONFIG_VAAPI_1 0)
+set(CONFIG_VAAPI_ENCODE 0)
+set(CONFIG_VULKAN_1_4 0)
+set(CONFIG_VC1DSP 1)
+set(CONFIG_VIDEODSP 1)
+set(CONFIG_VP3DSP 1)
+set(CONFIG_VP8DSP 1)
+set(CONFIG_VULKAN_ENCODE 0)
+set(CONFIG_VVC_SEI 1)
+set(CONFIG_WMA_FREQS 1)
+set(CONFIG_WMV2DSP 1)
+
+# =============================================================================
+# Generate Configuration Headers
+# =============================================================================
+
+# Generate config.h from CMake template
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/config.h.in"
+    "${CMAKE_BINARY_DIR}/config.h"
+    @ONLY
+)
+message(STATUS "Generated config.h from CMake template")
+
+# Generate config.asm for NASM assembler
+# NASM needs %define NAME VALUE format instead of #define NAME VALUE
+if(HAVE_X86ASM)
+    # Read config.h.in and convert #define NAME @VAR@ to %define NAME VALUE
+    file(READ "${CMAKE_SOURCE_DIR}/cmake/config.h.in" config_h_in_content)
+    # Extract all @VAR@ patterns and build NASM defines
+    set(config_asm_content "; Automatically generated by CMake - do not modify!\n")
+    # Get all variable names from config.h.in
+    string(REGEX MATCHALL "#define ([A-Z_0-9]+) @([A-Z_0-9]+)@" config_defines "${config_h_in_content}")
+    foreach(define_line IN LISTS config_defines)
+        string(REGEX MATCH "#define ([A-Z_0-9]+) @([A-Z_0-9]+)@" _ "${define_line}")
+        set(var_name "${CMAKE_MATCH_1}")
+        set(cmake_var "${CMAKE_MATCH_2}")
+        if(DEFINED ${cmake_var})
+            set(var_value "${${cmake_var}}")
+            if("${var_value}" STREQUAL "" OR NOT var_value)
+                set(var_value "0")
+            endif()
+            string(APPEND config_asm_content "%define ${var_name} ${var_value}\n")
+        else()
+            string(APPEND config_asm_content "%define ${var_name} 0\n")
+        endif()
+    endforeach()
+    file(WRITE "${CMAKE_BINARY_DIR}/config.asm" "${config_asm_content}")
+
+    # Also append codec CONFIG_* variables from ALL_CODECS list
+    # (these are set by FFmpegComponents.cmake and needed by some .asm files)
+    if(ALL_CODECS)
+        set(codec_asm_content "")
+        foreach(codec IN LISTS ALL_CODECS)
+            string(APPEND codec_asm_content "%define CONFIG_${codec} 1\n")
+        endforeach()
+        file(APPEND "${CMAKE_BINARY_DIR}/config.asm" "${codec_asm_content}")
+    endif()
+
+    message(STATUS "Generated config.asm for NASM assembler")
+
+    # Generate config_components.asm (explicitly included by some .asm files)
+    # Contains %define CONFIG_xxx_DECODER/ENCODER 1 for all enabled codecs
+    set(config_components_asm_content "; Automatically generated by CMake - do not modify!\n")
+    if(ALL_CODECS)
+        foreach(codec IN LISTS ALL_CODECS)
+            string(APPEND config_components_asm_content "%define CONFIG_${codec} 1\n")
+        endforeach()
+    endif()
+    file(WRITE "${CMAKE_BINARY_DIR}/config_components.asm" "${config_components_asm_content}")
+    message(STATUS "Generated config_components.asm for NASM assembler")
+endif()
+
+# config_components.h is generated by FFmpegComponents.cmake
+# Do not overwrite it here
+
+# Generate avconfig.h for libavutil
+set(AV_HAVE_BIGENDIAN ${HAVE_BIGENDIAN})
+set(AV_HAVE_FAST_UNALIGNED ${HAVE_FAST_UNALIGNED})
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/avconfig.h.in"
+    "${CMAKE_BINARY_DIR}/libavutil/avconfig.h"
+    @ONLY
+)
+
+# =============================================================================
+# Version Information
+# =============================================================================
+
+# Read version from VERSION file
+if(EXISTS "${CMAKE_SOURCE_DIR}/VERSION")
+    file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" FFMPEG_VERSION_STRING LIMIT_COUNT 1)
+    string(REPLACE "." ";" VERSION_LIST ${FFMPEG_VERSION_STRING})
+    list(GET VERSION_LIST 0 FFMPEG_VERSION_MAJOR)
+    list(GET VERSION_LIST 1 FFMPEG_VERSION_MINOR)
+    list(GET VERSION_LIST 2 FFMPEG_VERSION_MICRO)
+endif()
+
+# Generate ffversion.h
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+endif()
+if(NOT GIT_VERSION)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/VERSION")
+        file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" GIT_VERSION LIMIT_COUNT 1)
+    else()
+        set(GIT_VERSION "unknown")
+    endif()
+endif()
+
+set(FFVERSION_H "${CMAKE_BINARY_DIR}/libavutil/ffversion.h")
+set(FFVERSION_CONTENT "/* Automatically generated by CMake, do not manually edit! */
+#ifndef AVUTIL_FFVERSION_H
+#define AVUTIL_FFVERSION_H
+#define FFMPEG_VERSION \"${GIT_VERSION}\"
+#endif /* AVUTIL_FFVERSION_H */
+")
+
+# Only write if content changed to avoid spurious rebuilds
+if(EXISTS ${FFVERSION_H})
+    file(READ ${FFVERSION_H} EXISTING_CONTENT)
+endif()
+if(NOT "${EXISTING_CONTENT}" STREQUAL "${FFVERSION_CONTENT}")
+    file(WRITE ${FFVERSION_H} "${FFVERSION_CONTENT}")
+endif()
+
+# =============================================================================
+# Subdirectories
+# =============================================================================
+
+# Add libraries in dependency order
+add_subdirectory(libavutil)
+
+if(ENABLE_SWRESAMPLE)
+    add_subdirectory(libswresample)
+endif()
+
+if(ENABLE_SWSCALE)
+    add_subdirectory(libswscale)
+endif()
+
+if(ENABLE_AVCODEC)
+    add_subdirectory(libavcodec)
+endif()
+
+if(ENABLE_AVFORMAT)
+    add_subdirectory(libavformat)
+endif()
+
+if(ENABLE_AVFILTER)
+    add_subdirectory(libavfilter)
+endif()
+
+if(ENABLE_AVDEVICE)
+    add_subdirectory(libavdevice)
+endif()
+
+# Add tools
+if(ENABLE_FFMPEG OR ENABLE_FFPLAY OR ENABLE_FFPROBE)
+    add_subdirectory(fftools)
+endif()
+
+# Add tests (always, but FATE tests only if samples are provided)
+option(BUILD_TESTING "Build tests" ON)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# =============================================================================
+# Summary
+# =============================================================================
+
+message(STATUS "")
+message(STATUS "FFmpeg CMake Configuration Summary")
+message(STATUS "===================================")
+message(STATUS "  Version:        ${FFMPEG_VERSION_STRING}")
+message(STATUS "  Architecture:   ${FFMPEG_ARCH}")
+message(STATUS "  Build type:     ${CMAKE_BUILD_TYPE}")
+message(STATUS "")
+message(STATUS "Libraries:")
+message(STATUS "  libavutil:      ON")
+message(STATUS "  libswresample:  ${ENABLE_SWRESAMPLE}")
+message(STATUS "  libswscale:     ${ENABLE_SWSCALE}")
+message(STATUS "  libavcodec:     ${ENABLE_AVCODEC}")
+message(STATUS "  libavformat:    ${ENABLE_AVFORMAT}")
+message(STATUS "  libavfilter:    ${ENABLE_AVFILTER}")
+message(STATUS "  libavdevice:    ${ENABLE_AVDEVICE}")
+message(STATUS "")
+message(STATUS "Tools:")
+message(STATUS "  ffmpeg:         ${ENABLE_FFMPEG}")
+message(STATUS "  ffplay:         ${ENABLE_FFPLAY}")
+message(STATUS "  ffprobe:        ${ENABLE_FFPROBE}")
+message(STATUS "")
