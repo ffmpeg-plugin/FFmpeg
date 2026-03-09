@@ -286,6 +286,8 @@ set(avfilter_excluded_filters
     vf_dilation_opencl.c
     # CUDA hwupload
     vf_hwupload_cuda.c
+    # vf_lut.c uses DEFINE_LUT_FILTER macro to define multiple filters - handled specially below
+    vf_lut.c
 )
 
 # ============================================================================
@@ -310,11 +312,18 @@ file(GLOB avfilter_filter_sources
 )
 
 # Add helper files that are needed by filters
-foreach(helper aeval.c generate_wave_table.c)
+# Note: generate_wave_table.c is a pure helper (no FFFilter symbols)
+# aeval.c is NOT a pure helper - it defines ff_af_aeval and ff_asrc_aevalsrc
+# so it is included in the normal filter scan below
+foreach(helper generate_wave_table.c)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${helper}")
         list(APPEND avfilter_filter_sources "${CMAKE_CURRENT_SOURCE_DIR}/${helper}")
     endif()
 endforeach()
+# Add aeval.c as a regular filter source (it defines ff_af_aeval + ff_asrc_aevalsrc)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aeval.c")
+    list(APPEND avfilter_filter_sources "${CMAKE_CURRENT_SOURCE_DIR}/aeval.c")
+endif()
 
 # Convert absolute paths to relative paths and collect filter symbols
 set(avfilter_filter_symbols "")
@@ -334,8 +343,9 @@ foreach(src_abs IN LISTS avfilter_filter_sources)
     # e.g. af_volume.c -> ff_af_volume
     #      vf_scale.c  -> ff_vf_scale
     # Skip helper files that don't define a filter symbol
+    # Note: aeval.c is NOT a helper - it defines real filters
     set(is_helper FALSE)
-    foreach(h aeval generate_wave_table)
+    foreach(h generate_wave_table)
         if("${src_base}" STREQUAL "${h}")
             set(is_helper TRUE)
         endif()
@@ -398,6 +408,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/af_biquads.c")
         ff_af_highpass
         ff_af_allpass
         ff_af_biquad
+    )
+endif()
+
+# Add vf_lut.c manually (uses DEFINE_LUT_FILTER macro to define multiple filters)
+# It defines: ff_vf_lut, ff_vf_lutyuv, ff_vf_lutrgb
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vf_lut.c")
+    list(APPEND avfilter_sources "vf_lut.c")
+    list(APPEND avfilter_filter_symbols
+        ff_vf_lut
+        ff_vf_lutyuv
+        ff_vf_lutrgb
     )
 endif()
 
