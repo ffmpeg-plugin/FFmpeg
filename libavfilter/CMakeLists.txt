@@ -616,6 +616,17 @@ target_link_libraries(avfilter
         Threads::Threads
 )
 
+# Link FriBidi if available (needed for vf_drawtext bidirectional text)
+if(CONFIG_LIBFRIBIDI AND LIBFRIBIDI_LIBRARIES)
+    target_link_libraries(avfilter PRIVATE ${LIBFRIBIDI_LIBRARIES})
+    if(LIBFRIBIDI_INCLUDE_DIRS)
+        target_include_directories(avfilter PRIVATE ${LIBFRIBIDI_INCLUDE_DIRS})
+    endif()
+    if(LIBFRIBIDI_LIBRARY_DIRS)
+        target_link_directories(avfilter PRIVATE ${LIBFRIBIDI_LIBRARY_DIRS})
+    endif()
+endif()
+
 # Link FreeType2 if available (needed for vf_drawtext)
 if(Freetype_FOUND OR FREETYPE_FOUND)
     if(Freetype_FOUND)
