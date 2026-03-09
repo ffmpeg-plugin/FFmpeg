@@ -63,6 +63,25 @@ include(FFmpegFeatureDetect)
 include(FFmpegExternalLibs)
 
 # =============================================================================
+# RPATH Configuration (for build tree)
+# =============================================================================
+
+# On macOS/Linux, set rpath so executables can find dynamic libraries
+# without needing to install them first
+if(APPLE)
+    # macOS: use @loader_path and homebrew paths
+    set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+    list(APPEND CMAKE_BUILD_RPATH
+        "/opt/homebrew/lib"
+        "/usr/local/lib"
+    )
+    set(CMAKE_INSTALL_RPATH "@executable_path/../lib")
+elseif(UNIX)
+    set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+    set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+endif()
+
+# =============================================================================
 # Find Required Packages
 # =============================================================================
 
