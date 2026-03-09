@@ -1673,6 +1673,29 @@ foreach(_src IN LISTS avcodec_sources)
     endforeach()
 endforeach()
 
+# Also scan header files in subdirectories for codec definitions
+# Some codecs are defined in .h files (e.g., aacdec_latm.h, dsddec.h)
+# These headers are #included by .c files and need to be scanned
+set(_header_subdirs aac bsf hevc opus vvc)
+foreach(_hdir IN LISTS _header_subdirs)
+    set(_hdir_path "${CMAKE_CURRENT_SOURCE_DIR}/${_hdir}")
+    if(NOT IS_DIRECTORY "${_hdir_path}")
+        continue()
+    endif()
+    file(GLOB _hfiles "${_hdir_path}/*.h")
+    foreach(_hfile IN LISTS _hfiles)
+        file(STRINGS "${_hfile}" _h_lines
+            REGEX "^(const FFCodec|const FFBitStreamFilter) ff_[a-zA-Z0-9_]+")
+        foreach(_line IN LISTS _h_lines)
+            if(_line MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
+                list(APPEND _found_codec_syms "${CMAKE_MATCH_1}")
+            elseif(_line MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
+                list(APPEND _found_bsf_syms "${CMAKE_MATCH_1}")
+            endif()
+        endforeach()
+    endforeach()
+endforeach()
+
 # For symbols not found via direct scan, use gcc -E to expand macros
 # Collect symbols still missing
 set(_missing_codec_syms "")
