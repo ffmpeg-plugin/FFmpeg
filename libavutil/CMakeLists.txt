@@ -261,15 +261,11 @@ if(Vulkan_FOUND)
 endif()
 
 # Link VAAPI if available
-if(CONFIG_VAAPI AND LIBVA_FOUND)
-    if(TARGET PkgConfig::LIBVA)
-        target_link_libraries(avutil PRIVATE PkgConfig::LIBVA)
-    else()
-        target_link_libraries(avutil PRIVATE ${LIBVA_LIBRARIES})
-        target_include_directories(avutil PRIVATE ${LIBVA_INCLUDE_DIRS})
-        if(LIBVA_LIBRARY_DIRS)
-            target_link_directories(avutil PRIVATE ${LIBVA_LIBRARY_DIRS})
-        endif()
+# ffmpeg_require_pkg_config(vaapi libva ...) sets VAAPI_* variables
+if(CONFIG_VAAPI AND VAAPI_LIBRARIES)
+    target_link_libraries(avutil PRIVATE ${VAAPI_LIBRARIES})
+    if(VAAPI_INCLUDE_DIRS)
+        target_include_directories(avutil PRIVATE ${VAAPI_INCLUDE_DIRS})
     endif()
 endif()
 
