@@ -1708,7 +1708,7 @@ endforeach()
 if(_missing_codec_syms)
     # Use gcc -E to find macro-defined symbols in avcodec_sources
     # We scan files that are likely to define codecs via macros
-    set(_macro_codec_files pcm.c adpcm.c g711.c g722.c g726.c dpcm.c)
+    set(_macro_codec_files pcm.c adpcm.c g711.c g722.c g726.c dpcm.c dsddec.c)
     foreach(_mfile IN LISTS _macro_codec_files)
         set(_mfile_abs "${CMAKE_CURRENT_SOURCE_DIR}/${_mfile}")
         if(NOT EXISTS "${_mfile_abs}")
