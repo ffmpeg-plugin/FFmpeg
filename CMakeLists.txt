@@ -177,13 +177,22 @@ if(WIN32)
     set(HAVE_WS2TCPIP_H 1)
 else()
     # POSIX systems
-    check_c_source_compiles("
-        #include <sys/types.h>
-        #include <sys/socket.h>
-        int main(void) { socklen_t x = 0; (void)x; return 0; }
-    " HAVE_SOCKLEN_T)
-    if(NOT HAVE_SOCKLEN_T)
-        set(HAVE_SOCKLEN_T 0)
+    # On macOS, socklen_t is always available (it's defined in system headers)
+    # but check_c_source_compiles fails without _DARWIN_C_SOURCE on Apple platforms.
+    # Use force-set approach for macOS to avoid CMake detection issues.
+    set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
+    if(APPLE)
+        # On macOS, socklen_t is always present (required by POSIX)
+        set(HAVE_SOCKLEN_T 1)
+    else()
+        check_c_source_compiles("
+            #include <sys/types.h>
+            #include <sys/socket.h>
+            int main(void) { socklen_t x = 0; (void)x; return 0; }
+        " HAVE_SOCKLEN_T)
+        if(NOT HAVE_SOCKLEN_T)
+            set(HAVE_SOCKLEN_T 0)
+        endif()
     endif()
 
     check_c_source_compiles("
@@ -205,24 +214,34 @@ else()
         set(HAVE_STRUCT_SOCKADDR_STORAGE 0)
     endif()
 
-    check_c_source_compiles("
-        #include <sys/types.h>
-        #include <sys/socket.h>
-        #include <netinet/in.h>
-        int main(void) { struct sockaddr_in6 s6; (void)s6; return 0; }
-    " HAVE_STRUCT_SOCKADDR_IN6)
-    if(NOT HAVE_STRUCT_SOCKADDR_IN6)
-        set(HAVE_STRUCT_SOCKADDR_IN6 0)
+    # HAVE_STRUCT_SOCKADDR_IN6 and HAVE_STRUCT_SOCKADDR_SA_LEN for macOS
+    # On macOS, these are always available but check_c_source_compiles may fail
+    # without proper feature test macros. Force-set them on macOS.
+    if(APPLE)
+        set(HAVE_STRUCT_SOCKADDR_IN6 1)
+        set(HAVE_STRUCT_SOCKADDR_SA_LEN 1)
+    else()
+        check_c_source_compiles("
+            #include <sys/types.h>
+            #include <sys/socket.h>
+            #include <netinet/in.h>
+            int main(void) { struct sockaddr_in6 s6; (void)s6; return 0; }
+        " HAVE_STRUCT_SOCKADDR_IN6)
+        if(NOT HAVE_STRUCT_SOCKADDR_IN6)
+            set(HAVE_STRUCT_SOCKADDR_IN6 0)
+        endif()
+
+        check_c_source_compiles("
+            #include <sys/types.h>
+            #include <sys/socket.h>
+            int main(void) { struct sockaddr sa; (void)sa.sa_len; return 0; }
+        " HAVE_STRUCT_SOCKADDR_SA_LEN)
+        if(NOT HAVE_STRUCT_SOCKADDR_SA_LEN)
+            set(HAVE_STRUCT_SOCKADDR_SA_LEN 0)
+        endif()
     endif()
 
-    check_c_source_compiles("
-        #include <sys/types.h>
-        #include <sys/socket.h>
-        int main(void) { struct sockaddr sa; (void)sa.sa_len; return 0; }
-    " HAVE_STRUCT_SOCKADDR_SA_LEN)
-    if(NOT HAVE_STRUCT_SOCKADDR_SA_LEN)
-        set(HAVE_STRUCT_SOCKADDR_SA_LEN 0)
-    endif()
+    set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS_SAVE})
 endif()
 
 # Inline ASM support
