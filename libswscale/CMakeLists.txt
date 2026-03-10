@@ -39,12 +39,17 @@ set(swscale_sources
 # ============================================================================
 if(ARCH_X86 AND ENABLE_ASM)
     list(APPEND swscale_sources
-        x86/hscale_fast_bilinear_simd.c
         x86/ops.c
         x86/rgb2rgb.c
         x86/swscale.c
         x86/yuv2rgb.c
     )
+    # hscale_fast_bilinear_simd.c uses GCC inline asm (__asm__ volatile)
+    # Only compile when HAVE_MMXEXT_INLINE=1 (not available on MSVC)
+    # Corresponds to: OBJS-$(HAVE_MMXEXT_INLINE) += x86/hscale_fast_bilinear_simd.o
+    if(HAVE_MMXEXT_INLINE)
+        list(APPEND swscale_sources x86/hscale_fast_bilinear_simd.c)
+    endif()
 
     if(HAVE_X86ASM)
         list(APPEND swscale_sources

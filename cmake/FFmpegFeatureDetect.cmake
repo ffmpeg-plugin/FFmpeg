@@ -213,6 +213,28 @@ if(WIN32)
     check_function_exists(CreateSemaphore HAVE_CREATESEMAPHORE)
     check_function_exists(CreateThreadpoolTimer HAVE_CREATETHREADPOOLTIMER)
     check_function_exists(CreateWaitableTimerEx HAVE_CREATEWAITABLETIMEREX)
+
+    # Additional Windows functions needed by FFmpeg
+    check_function_exists(CommandLineToArgvW HAVE_COMMANDLINETOARGVW)
+    check_function_exists(GetModuleHandle HAVE_GETMODULEHANDLE)
+    check_function_exists(LoadLibrary HAVE_LOADLIBRARY)
+    check_function_exists(SetDllDirectory HAVE_SETDLLDIRECTORY)
+
+    # Windows Winsock2 network structures and functions
+    # These are always available on Windows via winsock2.h / ws2tcpip.h
+    # Force-set them to 1 to avoid CMake cache issues
+    set(HAVE_STRUCT_SOCKADDR_STORAGE 1)
+    set(HAVE_STRUCT_ADDRINFO 1)
+    set(HAVE_STRUCT_POLLFD 1)
+    set(HAVE_GETADDRINFO 1)
+
+    set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES_SAVED})
+
+    # Windows-specific headers that are always present on MSVC
+    set(HAVE_DIRECT_H 1)   # <direct.h> - _mkdir, _wmkdir, _rmdir, _wrmdir
+    set(HAVE_IO_H 1)       # <io.h> - _open, _close, _read, _write etc.
+    set(HAVE_WINDOWS_H 1)  # <windows.h>
+    set(HAVE_SHELLAPI_H 1) # <shellapi.h>
 else()
     set(HAVE_SETMODE 0)
     set(HAVE_ALIGNED_MALLOC 0)
@@ -225,6 +247,65 @@ else()
     set(HAVE_CREATESEMAPHORE 0)
     set(HAVE_CREATETHREADPOOLTIMER 0)
     set(HAVE_CREATEWAITABLETIMEREX 0)
+    set(HAVE_COMMANDLINETOARGVW 0)
+    set(HAVE_GETMODULEHANDLE 0)
+    set(HAVE_LOADLIBRARY 0)
+    set(HAVE_SETDLLDIRECTORY 0)
+    set(HAVE_DIRECT_H 0)
+    set(HAVE_IO_H 0)
+    set(HAVE_WINDOWS_H 0)
+    set(HAVE_SHELLAPI_H 0)
+
+    # POSIX network structures (non-Windows)
+    check_c_source_compiles("
+        #include <sys/socket.h>
+        int main(void) {
+            struct sockaddr_storage ss;
+            (void)ss;
+            return 0;
+        }
+    " HAVE_STRUCT_SOCKADDR_STORAGE)
+    if(NOT HAVE_STRUCT_SOCKADDR_STORAGE)
+        set(HAVE_STRUCT_SOCKADDR_STORAGE 0)
+    endif()
+
+    check_c_source_compiles("
+        #include <netdb.h>
+        int main(void) {
+            struct addrinfo ai;
+            (void)ai;
+            return 0;
+        }
+    " HAVE_STRUCT_ADDRINFO)
+    if(NOT HAVE_STRUCT_ADDRINFO)
+        set(HAVE_STRUCT_ADDRINFO 0)
+    endif()
+
+    check_c_source_compiles("
+        #include <poll.h>
+        int main(void) {
+            struct pollfd pfd;
+            pfd.fd = 0;
+            pfd.events = POLLIN;
+            (void)pfd;
+            return 0;
+        }
+    " HAVE_STRUCT_POLLFD)
+    if(NOT HAVE_STRUCT_POLLFD)
+        set(HAVE_STRUCT_POLLFD 0)
+    endif()
+
+    check_c_source_compiles("
+        #include <netdb.h>
+        int main(void) {
+            struct addrinfo *res = NULL;
+            getaddrinfo(\"localhost\", NULL, NULL, &res);
+            return 0;
+        }
+    " HAVE_GETADDRINFO)
+    if(NOT HAVE_GETADDRINFO)
+        set(HAVE_GETADDRINFO 0)
+    endif()
 endif()
 
 # =============================================================================
@@ -506,3 +587,59 @@ message(STATUS "Feature detection complete")
 message(STATUS "  Big endian: ${HAVE_BIGENDIAN}")
 message(STATUS "  64-bit build: ${HAVE_64BIT}")
 message(STATUS "  Fast unaligned: ${HAVE_FAST_UNALIGNED}")
+
+# =============================================================================
+# Inline Assembly Support
+# =============================================================================
+# MSVC does NOT support GCC-style inline asm (__asm__ volatile)
+# GCC/Clang support it natively
+if(MSVC)
+    set(HAVE_INLINE_ASM 0)
+    set(HAVE_INLINE_ASM_DIRECT_SYMBOL_REFS 0)
+    set(HAVE_INLINE_ASM_LABELS 0)
+    set(HAVE_INLINE_ASM_NONLOCAL_LABELS 0)
+else()
+    # Check for GCC-style inline asm
+    check_c_source_compiles("
+        int main(void) {
+            int x = 0;
+            __asm__ volatile(\"\" : \"+r\"(x));
+            return x;
+        }
+    " HAVE_INLINE_ASM)
+    if(NOT HAVE_INLINE_ASM)
+        set(HAVE_INLINE_ASM 0)
+    endif()
+    # Check for direct symbol refs in inline asm
+    check_c_source_compiles("
+        void test_func(void) {}
+        int main(void) {
+            __asm__ volatile(\"call test_func\" ::: \"memory\");
+            return 0;
+        }
+    " HAVE_INLINE_ASM_DIRECT_SYMBOL_REFS)
+    if(NOT HAVE_INLINE_ASM_DIRECT_SYMBOL_REFS)
+        set(HAVE_INLINE_ASM_DIRECT_SYMBOL_REFS 0)
+    endif()
+    # Check for labels in inline asm
+    check_c_source_compiles("
+        int main(void) {
+            __asm__ volatile(\"0: jmp 0b\" :::);
+            return 0;
+        }
+    " HAVE_INLINE_ASM_LABELS)
+    if(NOT HAVE_INLINE_ASM_LABELS)
+        set(HAVE_INLINE_ASM_LABELS 0)
+    endif()
+    # Check for nonlocal labels in inline asm
+    check_c_source_compiles("
+        int main(void) {
+            __asm__ volatile(\".Ltest_label: nop\" :::);
+            return 0;
+        }
+    " HAVE_INLINE_ASM_NONLOCAL_LABELS)
+    if(NOT HAVE_INLINE_ASM_NONLOCAL_LABELS)
+        set(HAVE_INLINE_ASM_NONLOCAL_LABELS 0)
+    endif()
+endif()
+message(STATUS "  Inline ASM: ${HAVE_INLINE_ASM}")

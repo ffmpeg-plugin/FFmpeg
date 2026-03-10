@@ -216,17 +216,73 @@ if(LIBXML2_FOUND)
     target_include_directories(avformat PRIVATE ${LIBXML2_INCLUDE_DIR})
     message(STATUS "avformat: linking libxml2")
 else()
-    message(STATUS "avformat: libxml2 not found, excluding dashdec.c")
-    # dashdec.c requires libxml2 unconditionally - exclude it
+    message(STATUS "avformat: libxml2 not found, excluding dashdec.c, imfdec.c, imf_cpl.c")
+    # dashdec.c, imfdec.c, imf_cpl.c all require libxml2 (via imf.h) - exclude them
     get_target_property(_avfmt_srcs avformat SOURCES)
-    list(FILTER _avfmt_srcs EXCLUDE REGEX "dashdec\\.c$")
+    list(FILTER _avfmt_srcs EXCLUDE REGEX "(dashdec|imfdec|imf_cpl)\\.c$")
     set_target_properties(avformat PROPERTIES SOURCES "${_avfmt_srcs}")
+
+    # allformats.c unconditionally references ff_dash_demuxer and ff_imf_demuxer.
+    # protocols.c unconditionally references ff_unix_protocol.
+    # Provide stub definitions so the linker can resolve these symbols.
+    set(_stub_file "${CMAKE_CURRENT_BINARY_DIR}/avformat_xml_stubs.c")
+    file(WRITE "${_stub_file}" "
+/* Auto-generated stub: provides empty demuxer/muxer/protocol structs when deps are absent */
+#include \"avformat.h\"
+#include \"demux.h\"
+#include \"mux.h\"
+#include \"url.h\"
+
+/* Stub for DASH demuxer (requires libxml2) */
+const FFInputFormat ff_dash_demuxer = {
+    .p.name = \"dash\",
+    .p.long_name = \"Dynamic Adaptive Streaming over HTTP (stub)\",
+};
+
+/* Stub for IMF demuxer (requires libxml2) */
+const FFInputFormat ff_imf_demuxer = {
+    .p.name = \"imf\",
+    .p.long_name = \"IMF (Interoperable Master Format) (stub)\",
+};
+
+/* Stub for WHIP muxer (requires OpenSSL) */
+const FFOutputFormat ff_whip_muxer = {
+    .p.name = \"whip\",
+    .p.long_name = \"WebRTC WHIP (stub)\",
+};
+
+/* Stub for Unix domain socket protocol (requires sys/un.h, POSIX only) */
+const URLProtocol ff_unix_protocol = {
+    .name = \"unix\",
+};
+")
+    target_sources(avformat PRIVATE "${_stub_file}")
 endif()
 
 # Link zlib if available (needed for mov.c, http.c, etc.)
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)
     target_link_libraries(avformat PRIVATE ZLIB::ZLIB)
+endif()
+
+# On Windows, exclude files that require POSIX-only headers
+if(WIN32)
+    get_target_property(_avfmt_srcs avformat SOURCES)
+    # unix.c requires sys/un.h (Unix domain sockets) - not available on Windows MSVC
+    list(FILTER _avfmt_srcs EXCLUDE REGEX "unix\\.c$")
+    # whip.c requires OpenSSL TLS/DTLS functions - exclude when OpenSSL not available
+    # Note: ff_whip_muxer stub is provided by avformat_xml_stubs.c when libxml2 is absent
+    if(NOT OPENSSL_FOUND AND LIBXML2_FOUND)
+        # Only exclude whip.c if we didn't already provide a stub via xml_stubs
+        list(FILTER _avfmt_srcs EXCLUDE REGEX "whip\\.c$")
+    elseif(NOT OPENSSL_FOUND AND NOT LIBXML2_FOUND)
+        # whip.c is already covered by the stub file, just exclude the real source
+        list(FILTER _avfmt_srcs EXCLUDE REGEX "whip\\.c$")
+    endif()
+    set_target_properties(avformat PROPERTIES SOURCES "${_avfmt_srcs}")
+
+    # Link Winsock2 for network functions (select, ioctlsocket, gethostname, etc.)
+    target_link_libraries(avformat PRIVATE ws2_32)
 endif()
 
 # Link bzip2 if available (needed for matroskadec.c)

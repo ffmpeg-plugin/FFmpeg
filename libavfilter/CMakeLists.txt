@@ -641,6 +641,26 @@ if(Freetype_FOUND OR FREETYPE_FOUND)
             target_link_directories(avfilter PRIVATE ${FREETYPE_LIBRARY_DIRS})
         endif()
     endif()
+else()
+    message(STATUS "avfilter: FreeType2 not found, excluding vf_drawtext.c")
+    get_target_property(_avflt_srcs avfilter SOURCES)
+    list(FILTER _avflt_srcs EXCLUDE REGEX "vf_drawtext\\.c$")
+    set_target_properties(avfilter PROPERTIES SOURCES "${_avflt_srcs}")
+
+    # allfilters.c unconditionally references ff_vf_drawtext.
+    # Provide a stub so the linker can resolve the symbol.
+    set(_drawtext_stub "${CMAKE_CURRENT_BINARY_DIR}/vf_drawtext_stub.c")
+    file(WRITE "${_drawtext_stub}" "
+/* Auto-generated stub: ff_vf_drawtext when FreeType2 is not available */
+#include \"avfilter.h\"
+#include \"filters.h\"
+
+const AVFilter ff_vf_drawtext = {
+    .name        = \"drawtext\",
+    .description = \"Draw text on the video frame (stub, FreeType2 not available)\",
+};
+")
+    target_sources(avfilter PRIVATE "${_drawtext_stub}")
 endif()
 
 # Link HarfBuzz if available (needed for vf_drawtext text shaping)
