@@ -471,12 +471,73 @@ else()
                 return 0;
             }
         " HAVE_AVX2)
-        
+
+        # FMA3
+        check_c_source_compiles("
+            #include <immintrin.h>
+            int main(void) {
+                __m256 a = _mm256_setzero_ps();
+                a = _mm256_fmadd_ps(a, a, a);
+                return 0;
+            }
+        " HAVE_FMA3)
+
+        # FMA4
+        check_c_source_compiles("
+            #include <x86intrin.h>
+            int main(void) {
+                __m128 a = _mm_setzero_ps();
+                a = _mm_macc_ps(a, a, a);
+                return 0;
+            }
+        " HAVE_FMA4)
+
+        # AESNI
+        check_c_source_compiles("
+            #include <wmmintrin.h>
+            int main(void) {
+                __m128i a = _mm_setzero_si128();
+                a = _mm_aesenc_si128(a, a);
+                return 0;
+            }
+        " HAVE_AESNI)
+
+        # XOP (AMD extension, may not be available on all compilers)
+        check_c_source_compiles("
+            #include <x86intrin.h>
+            int main(void) {
+                __m128i a = _mm_setzero_si128();
+                a = _mm_comlt_epi8(a, a);
+                return 0;
+            }
+        " HAVE_XOP)
+
         # Set external/inline variants
-        foreach(ext MMX MMXEXT SSE SSE2 SSE3 SSSE3 SSE4 SSE42 AVX AVX2 FMA3)
+        # MSVC does NOT support GCC-style inline asm (__asm__ volatile)
+        # So HAVE_xxx_INLINE must be 0 for MSVC, even if the SIMD extension is available
+        # HAVE_xxx_EXTERNAL = 1 means the extension is available via NASM external assembly
+        foreach(ext MMX MMXEXT SSE SSE2 SSE3 SSSE3 SSE4 SSE42 AVX AVX2 FMA3 FMA4 AESNI XOP)
             if(HAVE_${ext})
-                set(HAVE_${ext}_INLINE 1)
+                set(HAVE_${ext}_EXTERNAL 1)
+                if(MSVC)
+                    # MSVC: no GCC inline asm support
+                    set(HAVE_${ext}_INLINE 0)
+                else()
+                    set(HAVE_${ext}_INLINE 1)
+                endif()
             endif()
+        endforeach()
+
+        # NASM can assemble AESNI/FMA3/FMA4/XOP instructions even if C intrinsics
+        # are not available (e.g. MSVC doesn't support FMA4/XOP intrinsics).
+        # Force-enable EXTERNAL flags for these when NASM is available.
+        # Also force-enable AVX512/AVX512ICL/MMXEXT which NASM supports but
+        # may not be detected via C intrinsics on all compilers.
+        # Note: Do NOT force-enable MMX on 64-bit MSVC - _mm_empty() is not available
+        # in 64-bit mode and will cause linker errors.
+        foreach(ext AESNI FMA3 FMA4 XOP AVX512 AVX512ICL MMXEXT)
+            set(HAVE_${ext}_EXTERNAL 1)
+            set(HAVE_${ext} 1)
         endforeach()
     endif()
 

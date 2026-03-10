@@ -160,51 +160,69 @@ check_type_size("void*" SIZEOF_VOIDP)
 
 # Network/socket struct detection
 include(CheckCSourceCompiles)
-check_c_source_compiles("
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    int main(void) { socklen_t x = 0; (void)x; return 0; }
-" HAVE_SOCKLEN_T)
-if(NOT HAVE_SOCKLEN_T)
-    set(HAVE_SOCKLEN_T 0)
-endif()
 
-check_c_source_compiles("
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    #include <netdb.h>
-    int main(void) { struct addrinfo ai; (void)ai; return 0; }
-" HAVE_STRUCT_ADDRINFO)
-if(NOT HAVE_STRUCT_ADDRINFO)
-    set(HAVE_STRUCT_ADDRINFO 0)
-endif()
+if(WIN32)
+    # Windows uses Winsock2
+    # These structures are always available on Windows via winsock2.h / ws2tcpip.h
+    # Force-set them to 1 to avoid CMake cache issues with check_c_source_compiles
+    set(HAVE_SOCKLEN_T 1)
+    set(HAVE_STRUCT_ADDRINFO 1)
+    set(HAVE_STRUCT_SOCKADDR_STORAGE 1)
+    set(HAVE_STRUCT_SOCKADDR_IN6 1)
+    set(HAVE_STRUCT_SOCKADDR_SA_LEN 0)  # Windows doesn't have sa_len
+    set(HAVE_GETADDRINFO 1)
+    set(HAVE_STRUCT_POLLFD 1)
+    set(HAVE_CLOSESOCKET 1)
+    set(HAVE_WINSOCK2_H 1)
+    set(HAVE_WS2TCPIP_H 1)
+else()
+    # POSIX systems
+    check_c_source_compiles("
+        #include <sys/types.h>
+        #include <sys/socket.h>
+        int main(void) { socklen_t x = 0; (void)x; return 0; }
+    " HAVE_SOCKLEN_T)
+    if(NOT HAVE_SOCKLEN_T)
+        set(HAVE_SOCKLEN_T 0)
+    endif()
 
-check_c_source_compiles("
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    int main(void) { struct sockaddr_storage ss; (void)ss; return 0; }
-" HAVE_STRUCT_SOCKADDR_STORAGE)
-if(NOT HAVE_STRUCT_SOCKADDR_STORAGE)
-    set(HAVE_STRUCT_SOCKADDR_STORAGE 0)
-endif()
+    check_c_source_compiles("
+        #include <sys/types.h>
+        #include <sys/socket.h>
+        #include <netdb.h>
+        int main(void) { struct addrinfo ai; (void)ai; return 0; }
+    " HAVE_STRUCT_ADDRINFO)
+    if(NOT HAVE_STRUCT_ADDRINFO)
+        set(HAVE_STRUCT_ADDRINFO 0)
+    endif()
 
-check_c_source_compiles("
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-    int main(void) { struct sockaddr_in6 s6; (void)s6; return 0; }
-" HAVE_STRUCT_SOCKADDR_IN6)
-if(NOT HAVE_STRUCT_SOCKADDR_IN6)
-    set(HAVE_STRUCT_SOCKADDR_IN6 0)
-endif()
+    check_c_source_compiles("
+        #include <sys/types.h>
+        #include <sys/socket.h>
+        int main(void) { struct sockaddr_storage ss; (void)ss; return 0; }
+    " HAVE_STRUCT_SOCKADDR_STORAGE)
+    if(NOT HAVE_STRUCT_SOCKADDR_STORAGE)
+        set(HAVE_STRUCT_SOCKADDR_STORAGE 0)
+    endif()
 
-check_c_source_compiles("
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    int main(void) { struct sockaddr sa; (void)sa.sa_len; return 0; }
-" HAVE_STRUCT_SOCKADDR_SA_LEN)
-if(NOT HAVE_STRUCT_SOCKADDR_SA_LEN)
-    set(HAVE_STRUCT_SOCKADDR_SA_LEN 0)
+    check_c_source_compiles("
+        #include <sys/types.h>
+        #include <sys/socket.h>
+        #include <netinet/in.h>
+        int main(void) { struct sockaddr_in6 s6; (void)s6; return 0; }
+    " HAVE_STRUCT_SOCKADDR_IN6)
+    if(NOT HAVE_STRUCT_SOCKADDR_IN6)
+        set(HAVE_STRUCT_SOCKADDR_IN6 0)
+    endif()
+
+    check_c_source_compiles("
+        #include <sys/types.h>
+        #include <sys/socket.h>
+        int main(void) { struct sockaddr sa; (void)sa.sa_len; return 0; }
+    " HAVE_STRUCT_SOCKADDR_SA_LEN)
+    if(NOT HAVE_STRUCT_SOCKADDR_SA_LEN)
+        set(HAVE_STRUCT_SOCKADDR_SA_LEN 0)
+    endif()
 endif()
 
 # Inline ASM support

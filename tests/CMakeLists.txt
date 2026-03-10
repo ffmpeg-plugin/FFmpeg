@@ -30,27 +30,35 @@ add_executable(tiny_psnr
 )
 target_link_libraries(tiny_psnr PRIVATE avutil)
 # These test tools don't have full prototype declarations, disable the warning
-target_compile_options(tiny_psnr PRIVATE -Wno-missing-prototypes -Wno-error=missing-prototypes)
+target_compile_options(tiny_psnr PRIVATE
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-missing-prototypes>
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-error=missing-prototypes>)
 
 # tiny_ssim - SSIM comparison tool
 add_executable(tiny_ssim
     tiny_ssim.c
 )
 target_link_libraries(tiny_ssim PRIVATE avutil)
-target_compile_options(tiny_ssim PRIVATE -Wno-missing-prototypes -Wno-error=missing-prototypes)
+target_compile_options(tiny_ssim PRIVATE
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-missing-prototypes>
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-error=missing-prototypes>)
 
 # audiomatch - Audio comparison tool
 add_executable(audiomatch
     audiomatch.c
 )
 target_link_libraries(audiomatch PRIVATE avutil)
-target_compile_options(audiomatch PRIVATE -Wno-missing-prototypes -Wno-error=missing-prototypes)
+target_compile_options(audiomatch PRIVATE
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-missing-prototypes>
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-error=missing-prototypes>)
 
 # base64 - Base64 encoding/decoding utility
 add_executable(base64
     base64.c
 )
-target_compile_options(base64 PRIVATE -Wno-missing-prototypes -Wno-error=missing-prototypes)
+target_compile_options(base64 PRIVATE
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-missing-prototypes>
+    $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wno-error=missing-prototypes>)
 
 # =============================================================================
 # Simple smoke tests (no samples required)
