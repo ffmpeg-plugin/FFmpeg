@@ -530,15 +530,38 @@ else()
 
         # NASM can assemble AESNI/FMA3/FMA4/XOP instructions even if C intrinsics
         # are not available (e.g. MSVC doesn't support FMA4/XOP intrinsics).
-        # Force-enable EXTERNAL flags for these when NASM is available.
-        # Also force-enable AVX512/AVX512ICL/MMXEXT which NASM supports but
-        # may not be detected via C intrinsics on all compilers.
-        # Note: Do NOT force-enable MMX on 64-bit MSVC - _mm_empty() is not available
+        # Enable EXTERNAL flags for these when NASM is available and the corresponding
+        # base SIMD extension is supported.
+        # Note: Do NOT enable MMX on 64-bit MSVC - _mm_empty() is not available
         # in 64-bit mode and will cause linker errors.
-        foreach(ext AESNI FMA3 FMA4 XOP AVX512 AVX512ICL MMXEXT)
-            set(HAVE_${ext}_EXTERNAL 1)
-            set(HAVE_${ext} 1)
-        endforeach()
+        
+        # Only enable EXTERNAL if the base extension was detected via intrinsics
+        # This prevents linking errors when NASM files aren't actually compiled
+        if(HAVE_SSE2 OR HAVE_AESNI)
+            set(HAVE_AESNI_EXTERNAL 1)
+        endif()
+        if(HAVE_AVX2 OR HAVE_FMA3)
+            set(HAVE_FMA3_EXTERNAL 1)
+        endif()
+        if(HAVE_AVX)
+            # FMA4 and XOP are AMD-specific extensions, rarely used
+            # Only enable if explicitly detected
+            if(HAVE_FMA4)
+                set(HAVE_FMA4_EXTERNAL 1)
+            endif()
+            if(HAVE_XOP)
+                set(HAVE_XOP_EXTERNAL 1)
+            endif()
+        endif()
+        if(HAVE_SSE2)
+            # MMXEXT is supported by NASM but only enable if SSE2 is available
+            set(HAVE_MMXEXT_EXTERNAL 1)
+        endif()
+        # AVX512 and AVX512ICL require AVX2 support as baseline
+        if(HAVE_AVX2)
+            set(HAVE_AVX512_EXTERNAL 1)
+            set(HAVE_AVX512ICL_EXTERNAL 1)
+        endif()
     endif()
 
     # =============================================================================
