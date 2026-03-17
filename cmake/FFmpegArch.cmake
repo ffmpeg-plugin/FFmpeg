@@ -373,7 +373,383 @@ else()
                 set(HAVE_${ext}_INLINE 0)
             endif()
         endforeach()
-        
+
+    endif()
+
+    # =============================================================================
+    # Detect SIMD Extensions - ARM (32-bit)
+    # =============================================================================
+
+    if(ARCH_ARM AND NOT ARCH_AARCH64)
+        message(STATUS "Detecting ARM (32-bit) SIMD extensions...")
+
+        # ARMv5TE
+        set(HAVE_ARMV5TE 1)
+
+        # ARMv6
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("pkhbt r0, r0, r0" :::);
+                return 0;
+            }
+        " HAVE_ARMV6)
+
+        # ARMv6T2
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("movt r0, #0" :::);
+                return 0;
+            }
+        " HAVE_ARMV6T2)
+
+        # VFP (Vector Floating Point)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("fadds s0, s0, s0" :::);
+                return 0;
+            }
+        " HAVE_VFP)
+
+        # VFPv3
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("vmov.f32 s0, #1.0" :::);
+                return 0;
+            }
+        " HAVE_VFPV3)
+
+        # NEON
+        check_c_source_compiles("
+            #include <arm_neon.h>
+            int main(void) {
+                float32x4_t a = vdupq_n_f32(0.0f);
+                float32x4_t b = vaddq_f32(a, a);
+                (void)b;
+                return 0;
+            }
+        " HAVE_NEON)
+
+        # SETEND (set endianness)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("setend be" :::);
+                return 0;
+            }
+        " HAVE_SETEND)
+
+        # ARMv8 (AArch32)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("sdot v0.4s, v1.16b, v2.16b" :::);
+                return 0;
+            }
+        " HAVE_ARMV8)
+
+        # Set external/inline variants for ARM SIMD
+        foreach(ext ARMV5TE ARMV6 ARMV6T2 ARMV8 NEON VFP VFPV3 SETEND)
+            if(HAVE_${ext})
+                set(HAVE_${ext}_EXTERNAL 1)
+                set(HAVE_${ext}_INLINE 1)
+            else()
+                set(HAVE_${ext} 0)
+                set(HAVE_${ext}_EXTERNAL 0)
+                set(HAVE_${ext}_INLINE 0)
+            endif()
+        endforeach()
+    endif()
+
+    # =============================================================================
+    # Detect SIMD Extensions - LoongArch
+    # =============================================================================
+
+    if(ARCH_LOONGARCH)
+        message(STATUS "Detecting LoongArch SIMD extensions...")
+
+        # Loongson2
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("dmult.g $8, $9, $10" :::);
+                return 0;
+            }
+        " HAVE_LOONGSON2)
+
+        # Loongson3
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("gsldxc1 $f0, 0($2, $3)" :::);
+                return 0;
+            }
+        " HAVE_LOONGSON3)
+
+        # MMI (MultiMedia Instructions)
+        if(HAVE_LOONGSON2 OR HAVE_LOONGSON3)
+            check_c_source_compiles("
+                int main(void) {
+                    __asm__ volatile("pxor $f0, $f0, $f0" :::);
+                    return 0;
+                }
+            " HAVE_MMI)
+        endif()
+
+        # LSX (Loongson SIMD eXtension)
+        check_c_source_compiles("
+            #include <lsxintrin.h>
+            int main(void) {
+                __m128i a = __lsx_vreplgr2vr_w(0);
+                return 0;
+            }
+        " HAVE_LSX)
+
+        # LASX (Loongson Advanced SIMD eXtension)
+        check_c_source_compiles("
+            #include <lasxintrin.h>
+            int main(void) {
+                __m256i a = __lasx_xvreplgr2vr_w(0);
+                return 0;
+            }
+        " HAVE_LASX)
+
+        foreach(ext LOONGSON2 LOONGSON3 MMI LSX LASX)
+            if(NOT HAVE_${ext})
+                set(HAVE_${ext} 0)
+            endif()
+        endforeach()
+    endif()
+
+    # =============================================================================
+    # Detect SIMD Extensions - MIPS
+    # =============================================================================
+
+    if(ARCH_MIPS)
+        message(STATUS "Detecting MIPS SIMD extensions...")
+
+        # MIPS FPU
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("cvt.d.l $f0, $f2" :::);
+                return 0;
+            }
+        " HAVE_MIPSFPU)
+
+        # MIPS32R2
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("ext $0, $0, 0, 1" :::);
+                return 0;
+            }
+        " HAVE_MIPS32R2)
+
+        # MIPS32R5
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("eretnc" :::);
+                return 0;
+            }
+        " HAVE_MIPS32R5)
+
+        # MIPS32R6
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("aui $0, $0, 0" :::);
+                return 0;
+            }
+        " HAVE_MIPS32R6)
+
+        # MIPS64R2
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("dext $0, $0, 0, 1" :::);
+                return 0;
+            }
+        " HAVE_MIPS64R2)
+
+        # MIPS64R6
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("dlsa $0, $0, $0, 1" :::);
+                return 0;
+            }
+        " HAVE_MIPS64R6)
+
+        # MIPS DSP
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("addu.qb $t0, $t1, $t2" :::);
+                return 0;
+            }
+        " HAVE_MIPSDSP)
+
+        # MIPS DSPR2
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("absq_s.qb $t0, $t1" :::);
+                return 0;
+            }
+        " HAVE_MIPSDSPR2)
+
+        # MSA (MIPS SIMD Architecture)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("addvi.b $w0, $w1, 1" :::);
+                return 0;
+            }
+        " HAVE_MSA)
+
+        foreach(ext MIPSFPU MIPS32R2 MIPS32R5 MIPS32R6 MIPS64R2 MIPS64R6 MIPSDSP MIPSDSPR2 MSA)
+            if(NOT HAVE_${ext})
+                set(HAVE_${ext} 0)
+            endif()
+        endforeach()
+    endif()
+
+    # =============================================================================
+    # Detect SIMD Extensions - PowerPC
+    # =============================================================================
+
+    if(ARCH_PPC)
+        message(STATUS "Detecting PowerPC SIMD extensions...")
+
+        # Altivec
+        check_c_source_compiles("
+            #include <altivec.h>
+            int main(void) {
+                vector unsigned int a = vec_splat_u32(0);
+                return 0;
+            }
+        " HAVE_ALTIVEC)
+
+        # VSX (Vector Scalar eXtensions)
+        check_c_source_compiles("
+            #include <altivec.h>
+            int main(void) {
+                vector double a = vec_splats(0.0);
+                return 0;
+            }
+        " HAVE_VSX)
+
+        # Power8
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("vcipher 0, 0, 0" :::);
+                return 0;
+            }
+        " HAVE_POWER8)
+
+        # DCBZL (data cache block zero long)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("dcbzl 0, %0" :: "r"(0) :);
+                return 0;
+            }
+        " HAVE_DCBZL)
+
+        # LDBRX (load doubleword byte-reverse indexed)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("ldbrx 0, 0, 0" :::);
+                return 0;
+            }
+        " HAVE_LDBRX)
+
+        # PPC4XX
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile("maclhw r10, r11, r12" :::);
+                return 0;
+            }
+        " HAVE_PPC4XX)
+
+        # vec_xl (vector load with alignment hint)
+        check_c_source_compiles("
+            #include <altivec.h>
+            int main(void) {
+                vector unsigned char a = vec_xl(0, (unsigned char*)0);
+                return 0;
+            }
+        " HAVE_VEC_XL)
+
+        foreach(ext ALTIVEC VSX POWER8 DCBZL LDBRX PPC4XX VEC_XL)
+            if(NOT HAVE_${ext})
+                set(HAVE_${ext} 0)
+            endif()
+            if(NOT HAVE_${ext}_EXTERNAL)
+                set(HAVE_${ext}_EXTERNAL 0)
+            endif()
+            if(NOT HAVE_${ext}_INLINE)
+                set(HAVE_${ext}_INLINE 0)
+            endif()
+        endforeach()
+    endif()
+
+    # =============================================================================
+    # Detect SIMD Extensions - RISC-V
+    # =============================================================================
+
+    if(ARCH_RISCV)
+        message(STATUS "Detecting RISC-V SIMD extensions...")
+
+        # Basic RISC-V
+        set(HAVE_RV 1)
+
+        # RVV (RISC-V Vector)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile(".option arch, +v" :::);
+                __asm__ volatile("vsetivli zero, 0, e8, m1, ta, ma" :::);
+                return 0;
+            }
+        " HAVE_RVV)
+
+        # RV_ZICBOP (cache block prefetch)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile(".option arch, +zicbop" :::);
+                __asm__ volatile("prefetch.r 64(a0)" :::);
+                return 0;
+            }
+        " HAVE_RV_ZICBOP)
+
+        # RV_ZVBB (vector bit manipulation)
+        check_c_source_compiles("
+            int main(void) {
+                __asm__ volatile(".option arch, +zvbb" :::);
+                __asm__ volatile("vclz.v v0, v8" :::);
+                return 0;
+            }
+        " HAVE_RV_ZVBB)
+
+        foreach(ext RV RVV RV_ZICBOP RV_ZVBB)
+            if(NOT HAVE_${ext})
+                set(HAVE_${ext} 0)
+            endif()
+            if(NOT HAVE_${ext}_EXTERNAL)
+                set(HAVE_${ext}_EXTERNAL 0)
+            endif()
+            if(NOT HAVE_${ext}_INLINE)
+                set(HAVE_${ext}_INLINE 0)
+            endif()
+        endforeach()
+    endif()
+
+    # =============================================================================
+    # Detect SIMD Extensions - WebAssembly
+    # =============================================================================
+
+    if(ARCH_WASM)
+        message(STATUS "Detecting WebAssembly SIMD extensions...")
+
+        # SIMD128
+        check_c_source_compiles("
+            #include <wasm_simd128.h>
+            int main(void) {
+                v128_t a = wasm_f32x4_splat(0.0f);
+                return 0;
+            }
+        " HAVE_SIMD128)
+
+        if(NOT HAVE_SIMD128)
+            set(HAVE_SIMD128 0)
+        endif()
     endif()
 
     # =============================================================================

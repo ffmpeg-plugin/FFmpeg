@@ -76,6 +76,18 @@ check_include_file("mach/host_info.h" HAVE_MACH_HOST_INFO_H)
 # Video4Linux
 check_include_file("linux/videodev2.h" HAVE_LINUX_VIDEODEV2_H)
 
+# glob
+check_include_file("glob.h" HAVE_GLOB_H)
+
+# sys/prctl
+check_include_file("sys/prctl.h" HAVE_SYS_PRCTL_H)
+
+# sys/auxv
+check_include_file("sys/auxv.h" HAVE_SYS_AUXV_H)
+
+# sys/sysctl
+check_include_file("sys/sysctl.h" HAVE_SYS_SYSCTL_H)
+
 # OpenCL
 check_include_file("CL/cl.h" HAVE_CL_CL_H)
 if(NOT HAVE_CL_CL_H)
@@ -178,27 +190,46 @@ check_math_func(truncf HAVE_TRUNCF)
 # Standard C functions (non-math)
 check_function_exists(aligned_alloc HAVE_ALIGNED_ALLOC)
 check_function_exists(clock_gettime HAVE_CLOCK_GETTIME)
+check_function_exists(fcntl HAVE_FCNTL)
+check_function_exists(fork HAVE_FORK)
 check_function_exists(getaddrinfo HAVE_GETADDRINFO)
 check_function_exists(getauxval HAVE_GETAUXVAL)
 check_function_exists(getenv HAVE_GETENV)
-check_function_EXISTS(gethrtime HAVE_GETHRTIME)
+check_function_exists(gethrtime HAVE_GETHRTIME)
 check_function_exists(getopt HAVE_GETOPT)
 check_function_exists(getpeername HAVE_GETPEERNAME)
+check_function_exists(getrusage HAVE_GETRUSAGE)
 check_function_exists(gettimeofday HAVE_GETTIMEOFDAY)
+check_function_exists(inet_aton HAVE_INET_ATON)
 check_function_exists(isatty HAVE_ISATTY)
 check_function_exists(localtime_r HAVE_LOCALTIME_R)
+check_function_exists(lstat HAVE_LSTAT)
 check_function_exists(malloc_usable_size HAVE_MALLOC_USABLE_SIZE)
+check_function_exists(memalign HAVE_MEMALIGN)
+check_function_exists(mkstemp HAVE_MKSTEMP)
 check_function_exists(mmap HAVE_MMAP)
 check_function_exists(mprotect HAVE_MPROTECT)
 check_function_exists(nanosleep HAVE_NANOSLEEP)
 check_function_exists(pclose HAVE_PCLOSE)
 check_function_exists(popen HAVE_POPEN)
 check_function_exists(posix_memalign HAVE_POSIX_MEMALIGN)
+check_function_exists(sched_getaffinity HAVE_SCHED_GETAFFINITY)
 check_function_exists(setrlimit HAVE_SETRLIMIT)
 check_function_exists(snprintf HAVE_SNPRINTF)
 check_function_exists(strerror_r HAVE_STRERROR_R)
 check_function_exists(sysconf HAVE_SYSCONF)
+check_function_exists(sysctl HAVE_SYSCTL)
+check_function_exists(sysctlbyname HAVE_SYSCTLBYNAME)
+check_function_exists(tempnam HAVE_TEMPNAM)
 check_function_exists(times HAVE_TIMES)
+check_function_exists(usleep HAVE_USLEEP)
+
+# Ensure all function detection variables are defined (check_function_exists leaves them empty on failure)
+foreach(_func FORK GETHRTIME GETOPT GETRUSAGE INET_ATON ISATTY LSTAT MEMALIGN MKSTEMP PCLOSE POPEN SCHED_GETAFFINITY SETRLIMIT STRERROR_R SYSCTL SYSCTLBYNAME TEMPNAM TIMES USLEEP)
+    if(NOT HAVE_${_func})
+        set(HAVE_${_func} 0)
+    endif()
+endforeach()
 
 # Windows-specific functions
 if(WIN32)
@@ -373,6 +404,139 @@ else()
         set(HAVE_GETADDRINFO 0)
     endif()
 endif()
+
+# =============================================================================
+# Type and Structure Checks
+# =============================================================================
+
+# Check for struct stat.st_mtim.tv_nsec
+set(CMAKE_EXTRA_INCLUDE_FILES_SAVED ${CMAKE_EXTRA_INCLUDE_FILES})
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/stat.h")
+check_type_size("struct stat" STRUCT_STAT)
+set(CMAKE_EXTRA_INCLUDE_FILES ${CMAKE_EXTRA_INCLUDE_FILES_SAVED})
+
+# Check for struct rusage.ru_maxrss
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/time.h;sys/resource.h")
+check_type_size("struct rusage" STRUCT_RUSAGE)
+set(CMAKE_EXTRA_INCLUDE_FILES ${CMAKE_EXTRA_INCLUDE_FILES_SAVED})
+
+# Check for socklen_t
+check_type_size("socklen_t" SOCKLEN_T)
+if(NOT HAVE_SOCKLEN_T)
+    set(HAVE_SOCKLEN_T 0)
+endif()
+
+# Check for struct sockaddr_storage
+check_c_source_compiles("
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    int main() {
+        struct sockaddr_storage ss;
+        (void)ss;
+        return 0;
+    }
+" HAVE_STRUCT_SOCKADDR_STORAGE)
+
+# Check for struct sockaddr_in6
+check_c_source_compiles("
+    #include <netinet/in.h>
+    int main() {
+        struct sockaddr_in6 sin6;
+        (void)sin6;
+        return 0;
+    }
+" HAVE_STRUCT_SOCKADDR_IN6)
+
+# Check for struct addrinfo
+check_c_source_compiles("
+    #include <netdb.h>
+    int main() {
+        struct addrinfo ai;
+        (void)ai;
+        return 0;
+    }
+" HAVE_STRUCT_ADDRINFO)
+
+# Check for struct ipv6_mreq
+check_c_source_compiles("
+    #include <netinet/in.h>
+    int main() {
+        struct ipv6_mreq mreq;
+        (void)mreq;
+        return 0;
+    }
+" HAVE_STRUCT_IPV6_MREQ)
+
+# Check for struct ip_mreq_source
+check_c_source_compiles("
+    #define _BSD_SOURCE
+    #include <netinet/in.h>
+    int main() {
+        struct ip_mreq_source mreq;
+        (void)mreq;
+        return 0;
+    }
+" HAVE_STRUCT_IP_MREQ_SOURCE)
+
+# Check for struct group_source_req
+check_c_source_compiles("
+    #define _BSD_SOURCE
+    #include <netinet/in.h>
+    int main() {
+        struct group_source_req gsr;
+        (void)gsr;
+        return 0;
+    }
+" HAVE_STRUCT_GROUP_SOURCE_REQ)
+
+# Check for struct pollfd
+check_c_source_compiles("
+    #include <poll.h>
+    int main() {
+        struct pollfd pfd;
+        pfd.fd = 0;
+        pfd.events = POLLIN;
+        (void)pfd;
+        return 0;
+    }
+" HAVE_STRUCT_POLLFD)
+
+# Check for struct sctp_event_subscribe
+check_c_source_compiles("
+    #include <netinet/sctp.h>
+    int main() {
+        struct sctp_event_subscribe evt;
+        (void)evt;
+        return 0;
+    }
+" HAVE_STRUCT_SCTP_EVENT_SUBSCRIBE)
+
+# Check for struct msghdr.msg_flags
+check_struct_has_member("struct msghdr" msg_flags "sys/socket.h" HAVE_STRUCT_MSGHDR_MSG_FLAGS)
+
+# Check for struct sockaddr.sa_len
+check_struct_has_member("struct sockaddr" sa_len "sys/types.h;sys/socket.h" HAVE_STRUCT_SOCKADDR_SA_LEN)
+
+# Check for struct stat.st_mtim.tv_nsec
+include(CheckStructHasMember)
+check_struct_has_member("struct stat" st_mtim.tv_nsec "sys/stat.h" HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
+if(NOT HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
+    check_struct_has_member("struct stat" st_mtimespec.tv_nsec "sys/stat.h" HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+endif()
+
+# Check for struct rusage.ru_maxrss
+check_struct_has_member("struct rusage" ru_maxrss "sys/time.h;sys/resource.h" HAVE_STRUCT_RUSAGE_RU_MAXRSS)
+
+# Check for audio_buf_info (OSS)
+check_c_source_compiles("
+    #include <sys/soundcard.h>
+    int main() {
+        audio_buf_info abi;
+        abi.bytes = 0;
+        (void)abi;
+        return 0;
+    }
+" HAVE_AUDIO_BUF_INFO)
 
 # =============================================================================
 # System Capability Checks

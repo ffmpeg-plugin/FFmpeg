@@ -8,57 +8,57 @@
 # Function to parse OBJS lists from Makefiles like libavcodec/Makefile
 function(parse_makefile_objs file_path out_var)
     set(SOURCES "")
-    
+
     if(NOT EXISTS "${file_path}")
         set(${out_var} "" PARENT_SCOPE)
         return()
     endif()
-    
+
     file(STRINGS "${file_path}" lines)
     set(in_objs_section FALSE)
     set(current_line "")
-    
+
     foreach(line ${lines})
         # Check if starting OBJS section
         if(line MATCHES "^OBJS\\s*=")
             set(in_objs_section TRUE)
             string(REGEX REPLACE "^OBJS\\s*=" "" line "${line}")
         endif()
-        
+
         if(NOT in_objs_section)
             continue()
         endif()
-        
+
         # Remove comment
         string(REGEX REPLACE "#.*$" "" line "${line}")
-        
+
         # Concatenate to current line (handle continuation)
         string(STRIP "${line}" line)
         string(APPEND current_line "${line}")
-        
+
         # Check for continuation backslash
         if(current_line MATCHES "\\\\$")
             string(REGEX REPLACE "\\\\$" "" current_line "${current_line}")
             continue()
         endif()
-        
+
         # Now we have a complete line, parse it
         if(current_line MATCHES "^OBJS\\-\\$")
             # End of base OBJS, start of conditional
             break()
         endif()
-        
+
         # Extract source files
         string(REGEX MATCHALL "[a-zA-Z0-9_/-]+\\.[cS]" files "${current_line}")
         list(APPEND SOURCES ${files})
-        
+
         set(current_line "")
     endforeach()
-    
+
     # Remove empty entries and duplicates
     list(REMOVE_DUPLICATES SOURCES)
     list(REMOVE_ITEM SOURCES "")
-    
+
     set(${out_var} ${SOURCES} PARENT_SCOPE)
 endfunction()
 
@@ -70,30 +70,30 @@ endfunction()
 function(add_arch_sources target arch base_dir sources_var)
     set(sources ${${sources_var}})
     set(asm_sources "")
-    
+
     if(arch STREQUAL "x86_64" OR arch STREQUAL "x86")
         if(ENABLE_ASM AND NASM_FOUND)
             # x86/x86_64 assembly
-            file(GLOB_RECURSE nasm_sources 
+            file(GLOB_RECURSE nasm_sources
                 "${CMAKE_CURRENT_SOURCE_DIR}/${base_dir}/x86/*.asm")
             list(APPEND asm_sources ${nasm_sources})
         endif()
     elseif(arch STREQUAL "aarch64")
         if(ENABLE_ASM)
             # AArch64 assembly
-            file(GLOB_RECURSE arm_sources 
+            file(GLOB_RECURSE arm_sources
                 "${CMAKE_CURRENT_SOURCE_DIR}/${base_dir}/aarch64/*.S")
             list(APPEND asm_sources ${arm_sources})
         endif()
     elseif(arch STREQUAL "arm")
         if(ENABLE_ASM)
             # ARM assembly
-            file(GLOB_RECURSE arm_sources 
+            file(GLOB_RECURSE arm_sources
                 "${CMAKE_CURRENT_SOURCE_DIR}/${base_dir}/arm/*.S")
             list(APPEND asm_sources ${arm_sources})
         endif()
     endif()
-    
+
     # Add assembly sources to target
     if(asm_sources)
         target_sources(${target} PRIVATE ${asm_sources})
@@ -108,9 +108,9 @@ endfunction()
 function(ffmpeg_link_libraries target)
     # FFmpeg libraries need to be linked in reverse dependency order
     # avutil is always last as all other libs depend on it
-    
+
     set(ffmpeg_libs "")
-    
+
     if(TARGET avfilter AND ENABLE_AVFILTER)
         list(APPEND ffmpeg_libs avfilter)
     endif()
@@ -131,7 +131,7 @@ function(ffmpeg_link_libraries target)
     endif()
     # avutil always last
     list(APPEND ffmpeg_libs avutil)
-    
+
     target_link_libraries(${target} PRIVATE ${ffmpeg_libs})
 endfunction()
 
@@ -142,23 +142,23 @@ endfunction()
 # Function to install FFmpeg library headers
 function(install_ffmpeg_headers lib_name)
     set(header_dir "${CMAKE_SOURCE_DIR}/${lib_name}")
-    
+
     # Find public headers (not internal ones)
     file(GLOB headers "${header_dir}/*.h")
-    
+
     # Filter out internal headers
     set(public_headers "")
     foreach(header ${headers})
         get_filename_component(filename "${header}" NAME)
-        
+
         # Skip internal headers (typically containing "internal" in name)
         if(filename MATCHES "internal")
             continue()
         endif()
-        
+
         list(APPEND public_headers "${header}")
     endforeach()
-    
+
     # Install headers
     install(FILES ${public_headers} DESTINATION "include/${lib_name}")
 endfunction()
@@ -170,9 +170,9 @@ endfunction()
 # Function to generate library version header
 function(generate_version_header lib_name version_major version_minor version_micro)
     string(TOUPPER "${lib_name}" lib_upper)
-    
+
     set(version_h "${CMAKE_BINARY_DIR}/${lib_name}/version.h")
-    
+
     file(WRITE "${version_h}" "/* Automatically generated - DO NOT EDIT */
 #ifndef ${lib_upper}_VERSION_H
 #define ${lib_upper}_VERSION_H
@@ -223,7 +223,7 @@ endfunction()
 
 # Function to find all C/ASM sources in a directory
 function(find_sources dir out_var)
-    file(GLOB_RECURSE sources 
+    file(GLOB_RECURSE sources
         "${dir}/*.c"
         "${dir}/*.S"
         "${dir}/*.asm"

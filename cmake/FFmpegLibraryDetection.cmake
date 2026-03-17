@@ -56,7 +56,7 @@ endfunction()
 macro(ffmpeg_check_lib name headers funcs)
     string(TOUPPER "${name}" _cl_name_upper)
     string(TOLOWER "${name}" _cl_name_lower)
-    
+
     # Check if disabled
     _should_skip_lib_check(${name} _cl_skip_check)
     if(_cl_skip_check)
@@ -68,22 +68,22 @@ macro(ffmpeg_check_lib name headers funcs)
         foreach(_cl_header ${headers})
             string(APPEND _cl_include_lines "#include <${_cl_header}>\n")
         endforeach()
-        
+
         # Build test code
         set(_cl_test_code "\n${_cl_include_lines}\nint main(void) {\n")
         foreach(_cl_func ${funcs})
             string(APPEND _cl_test_code "    void (*p_${_cl_func})(void) = (void (*)(void))${_cl_func};\n")
         endforeach()
         string(APPEND _cl_test_code "    return 0;\n}\n")
-        
+
         # Save and modify check state
         cmake_push_check_state(RESET)
-        
+
         # Add include directories and libraries
         set(CMAKE_REQUIRED_INCLUDES "")
         set(CMAKE_REQUIRED_LIBRARIES "")
         set(CMAKE_REQUIRED_FLAGS "")
-        
+
         foreach(_cl_arg ${ARGN})
             if(_cl_arg MATCHES "^-I")
                 string(REGEX REPLACE "^-I" "" _cl_inc_dir "${_cl_arg}")
@@ -101,10 +101,10 @@ macro(ffmpeg_check_lib name headers funcs)
                 list(APPEND CMAKE_REQUIRED_LIBRARIES "${_cl_arg}")
             endif()
         endforeach()
-        
+
         # Perform the check
         check_c_source_compiles("${_cl_test_code}" HAVE_${_cl_name_upper}_LIB)
-        
+
         cmake_pop_check_state()
         
         if(HAVE_${_cl_name_upper}_LIB)
@@ -132,7 +132,7 @@ endmacro()
 macro(ffmpeg_require_pkg_config name pkg_version headers funcs)
     string(TOUPPER "${name}" _rpc_name_upper)
     string(TOLOWER "${name}" _rpc_name_lower)
-    
+
     # Check if disabled
     _should_skip_lib_check(${name} _rpc_skip_check)
     if(_rpc_skip_check)
@@ -145,23 +145,23 @@ macro(ffmpeg_require_pkg_config name pkg_version headers funcs)
         else()
             set(_rpc_pkg_name "${pkg_version}")
         endif()
-        
+
         # Check pkg-config
         if(PKG_CONFIG_FOUND)
             pkg_check_modules(PC_${_rpc_name_upper} QUIET "${pkg_version}")
         endif()
-        
+
         if(PC_${_rpc_name_upper}_FOUND)
             # Pkg-config found the package, now verify headers/functions
             set(CMAKE_REQUIRED_INCLUDES ${PC_${_rpc_name_upper}_INCLUDE_DIRS})
             set(CMAKE_REQUIRED_LIBRARIES ${PC_${_rpc_name_upper}_LIBRARIES})
             set(CMAKE_REQUIRED_FLAGS ${PC_${_rpc_name_upper}_CFLAGS_OTHER})
-            
+
             set(_rpc_include_lines "")
             foreach(_rpc_header ${headers})
                 string(APPEND _rpc_include_lines "#include <${_rpc_header}>\n")
             endforeach()
-            
+
             set(_rpc_test_code "\n${_rpc_include_lines}\nint main(void) {\n")
             foreach(_rpc_func ${funcs})
                 if(_rpc_func)
@@ -169,9 +169,9 @@ macro(ffmpeg_require_pkg_config name pkg_version headers funcs)
                 endif()
             endforeach()
             string(APPEND _rpc_test_code "    return 0;\n}\n")
-            
+
             check_c_source_compiles("${_rpc_test_code}" HAVE_${_rpc_name_upper}_PC)
-            
+
             if(HAVE_${_rpc_name_upper}_PC OR NOT funcs)
                 set(CONFIG_${_rpc_name_upper} 1)
                 set(${_rpc_name_lower}_found TRUE)
@@ -213,7 +213,7 @@ endmacro()
 #
 function(ffmpeg_check_lib_cxx name headers classes)
     string(TOUPPER "${name}" name_upper)
-    
+
     _should_skip_lib_check(${name} skip_check)
     if(skip_check)
         set(CONFIG_${name_upper} 0 PARENT_SCOPE)
@@ -274,7 +274,7 @@ endfunction()
 #
 function(ffmpeg_enable_if_available name)
     string(TOUPPER "${name}" name_upper)
-    
+
     set(all_deps_met TRUE)
     foreach(dep ${ARGN})
         string(TOUPPER "CONFIG_${dep}" dep_config)
@@ -283,7 +283,7 @@ function(ffmpeg_enable_if_available name)
             break()
         endif()
     endforeach()
-    
+
     if(all_deps_met)
         set(CONFIG_${name_upper} 1 PARENT_SCOPE)
     else()
@@ -760,23 +760,23 @@ macro(FFmpegDetectLibraries)
     message(STATUS "==========================================")
     message(STATUS "Detecting external libraries...")
     message(STATUS "==========================================")
-    
+
     # Compression libraries
     FFmpegDetectZlib()
     FFmpegDetectBZip2()
     FFmpegDetectLZMA()
     FFmpegDetectIconv()
-    
+
     # Encryption/security
     FFmpegDetectOpenSSL()
-    
+
     # Graphics/UI libraries
     FFmpegDetectSDL2()
-    
+
     # Audio output libraries
     FFmpegDetectAlsa()
     FFmpegDetectPulseAudio()
-    
+
     # Video codecs
     FFmpegDetectLibx264()
     FFmpegDetectLibx265()
@@ -787,21 +787,21 @@ macro(FFmpegDetectLibraries)
     FFmpegDetectLibvorbis()
     FFmpegDetectLibtheora()
     FFmpegDetectLibspeex()
-    
+
     # Subtitles/Meta
     FFmpegDetectLibass()
     FFmpegDetectLibbluray()
     FFmpegDetectLibxml2()
-    
+
     # Hardware acceleration
     FFmpegDetectVAAPI()
     FFmpegDetectVDPAU()
     FFmpegDetectVulkan()
     FFmpegDetectOpenCL()
-    
+
     # Handle mutually exclusive options
     ffmpeg_disable_exclusive(libmfx libvpl)
-    
+
     message(STATUS "==========================================")
     message(STATUS "Library detection complete")
     message(STATUS "==========================================")
@@ -813,20 +813,72 @@ function(FFmpegPrintLibrarySummary)
     message(STATUS "")
     message(STATUS "Library Detection Summary:")
     message(STATUS "---------------------------")
-    
-    set(_libs openssl zlib bzlib lzma iconv sdl2 alsa pulseaudio 
-              libx264 libx265 libvpx libopus libmp3lame libfdk_aac
-              libvorbis libtheora libspeex libass libbluray libxml2
-              vaapi vdpau vulkan opencl)
-    
+
+    set(_libs
+        # Compression
+        zlib bzlib lzma iconv
+        # Security
+        openssl gnutls gcrypt
+        # Graphics/UI
+        sdl2 xlib_x11 xlib_xext xlib_xv
+        # Audio output
+        alsa pulseaudio sndio openal
+        # Video codecs
+        libx264 libx265 libvpx libaom libsvtav1 librav1e libdav1d
+        libopenh264 libkvazaar libsvtjpegxs libuavs3d libvvenc
+        libxavs libxavs2 libxevd libxeve liboapv liblcevc_dec
+        # Audio codecs
+        libopus libmp3lame libfdk_aac libvorbis libtheora libspeex
+        libtwolame libshine libsoxr libgsm libilbc
+        libopencore_amrnb libopencore_amrwb libvo_amrwbenc
+        libcodec2 liblc3
+        # Image
+        libwebp libjxl libtiff
+        # Subtitles/Font
+        libass libfreetype libfontconfig libfribidi libharfbuzz libxml2
+        libaribb24 libaribcaption libzvbi
+        # Network
+        librtmp libsrt librist libssh libcurl libzmq librabbitmq
+        # Media container
+        libbluray libdvdnav libdvdread libcdio
+        # Hardware acceleration
+        vaapi vdpau vulkan opencl cuda libmfx libvpl libnpp mmal omx
+        amf mediacodec ohcodec rkmpp
+        # Platform frameworks
+        videotoolbox audiotoolbox coreimage appkit avfoundation securetransport
+        mediafoundation libdrm v4l2_m2m
+        # Filters
+        frei0r ladspa lv2 libvidstab libzimg libsnappy librubberband
+        chromaprint
+        # ML/Special
+        libtensorflow libtesseract pocketsphinx whisper
+        # Misc
+        cairo libopencv libopencolorio librsvg lcms2
+        libchromaprint
+        # Audio I/O
+        libjack libiec61883 libdc1394 libflite libcaca libbs2b libmysofa
+        libklvanc libmodplug libopenmpt libgme
+        )
+
+    set(_enabled_count 0)
     foreach(_lib ${_libs})
         string(TOUPPER "${_lib}" _lib_upper)
         if(CONFIG_${_lib_upper})
             message(STATUS "  ${_lib}: enabled")
-        else()
-            message(STATUS "  ${_lib}: disabled")
+            math(EXPR _enabled_count "${_enabled_count} + 1")
         endif()
     endforeach()
-    
+
+    set(_disabled_count 0)
+    foreach(_lib ${_libs})
+        string(TOUPPER "${_lib}" _lib_upper)
+        if(NOT CONFIG_${_lib_upper})
+            message(STATUS "  ${_lib}: disabled")
+            math(EXPR _disabled_count "${_disabled_count} + 1")
+        endif()
+    endforeach()
+
+    message(STATUS "---------------------------")
+    message(STATUS "Enabled: ${_enabled_count}, Disabled: ${_disabled_count}")
     message(STATUS "")
 endfunction()

@@ -16,6 +16,15 @@ option(ENABLE_GPL       "Enable GPL licensed code"      OFF)
 option(ENABLE_VERSION3  "Enable (L)GPLv3 code"          OFF)
 option(ENABLE_NONFREE   "Enable nonfree code"           OFF)
 
+# Configuration options (configure equivalents)
+option(ENABLE_SMALL     "Optimize for size instead of speed" OFF)
+option(ENABLE_RUNTIME_CPUDETECT "Enable runtime CPU detection" ON)
+option(ENABLE_GRAY      "Enable full grayscale support" OFF)
+option(ENABLE_SWSCALE_ALPHA "Enable alpha channel support in swscale" ON)
+option(ENABLE_UNSTABLE  "Enable unstable/experimental code" ON)
+option(DISABLE_EVERYTHING "Disable all components (like --disable-everything)" OFF)
+option(ENABLE_AUTO_DETECT "Enable automatic library detection" ON)
+
 # Build type options
 option(ENABLE_SHARED    "Build shared libraries"        OFF)
 option(ENABLE_STATIC    "Build static libraries"        ON)
@@ -63,6 +72,12 @@ include(FFmpegFeatureDetect)
 include(FFmpegExternalLibs)
 
 # =============================================================================
+# Component Selection System
+# =============================================================================
+
+include(FFmpegComponents)
+
+# =============================================================================
 # RPATH Configuration (for build tree)
 # =============================================================================
 
@@ -103,6 +118,43 @@ else()
     set(HAVE_THREADS 0)
 endif()
 set(HAVE_OS2THREADS 0)
+
+# Set configuration option macros
+if(ENABLE_SMALL)
+    set(CONFIG_SMALL 1)
+else()
+    set(CONFIG_SMALL 0)
+endif()
+
+if(ENABLE_RUNTIME_CPUDETECT)
+    set(CONFIG_RUNTIME_CPUDETECT 1)
+else()
+    set(CONFIG_RUNTIME_CPUDETECT 0)
+endif()
+
+if(ENABLE_GRAY)
+    set(CONFIG_GRAY 1)
+else()
+    set(CONFIG_GRAY 0)
+endif()
+
+if(ENABLE_SWSCALE_ALPHA)
+    set(CONFIG_SWSCALE_ALPHA 1)
+else()
+    set(CONFIG_SWSCALE_ALPHA 0)
+endif()
+
+if(ENABLE_UNSTABLE)
+    set(CONFIG_UNSTABLE 1)
+else()
+    set(CONFIG_UNSTABLE 0)
+endif()
+
+if(ENABLE_AUTO_DETECT)
+    set(CONFIG_AUTO_DETECT 1)
+else()
+    set(CONFIG_AUTO_DETECT 0)
+endif()
 
 # =============================================================================
 # Compiler Flags
