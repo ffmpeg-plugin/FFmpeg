@@ -502,6 +502,36 @@ else()
             }
         " HAVE_AESNI)
 
+        # CLMUL (Carry-Less Multiplication)
+        check_c_source_compiles("
+            #include <wmmintrin.h>
+            int main(void) {
+                __m128i a = _mm_setzero_si128();
+                a = _mm_clmulepi64_si128(a, a, 0);
+                return 0;
+            }
+        " HAVE_CLMUL)
+
+        # AMD3DNOW
+        check_c_source_compiles("
+            #include <ammintrin.h>
+            int main(void) {
+                __m64 a = _m_from_int(0);
+                a = _m_femms();
+                return 0;
+            }
+        " HAVE_AMD3DNOW)
+
+        # AMD3DNOWEXT
+        check_c_source_compiles("
+            #include <ammintrin.h>
+            int main(void) {
+                __m64 a = _m_from_int(0);
+                a = _m_pf2iw(a);
+                return 0;
+            }
+        " HAVE_AMD3DNOWEXT)
+
         # XOP (AMD extension, may not be available on all compilers)
         check_c_source_compiles("
             #include <x86intrin.h>
@@ -664,8 +694,12 @@ else()
         set(HAVE_FAST_CLZ 0)
     endif()
 
-    # Fast cmov
-    set(HAVE_FAST_CMOV 0)
+    # Fast cmov - x86_64 has fast conditional moves
+    if(ARCH_X86_64)
+        set(HAVE_FAST_CMOV 1)
+    else()
+        set(HAVE_FAST_CMOV 0)
+    endif()
 
     # Fast float16 (aarch64 has this)
     if(ARCH_AARCH64)

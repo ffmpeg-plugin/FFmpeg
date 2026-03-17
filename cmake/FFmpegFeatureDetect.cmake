@@ -220,6 +220,14 @@ if(WIN32)
     check_function_exists(LoadLibrary HAVE_LOADLIBRARY)
     check_function_exists(SetDllDirectory HAVE_SETDLLDIRECTORY)
 
+    # Windows functions that need explicit checking
+    check_function_exists(_access HAVE_ACCESS)
+    check_function_exists(_kbhit HAVE_KBHIT)
+    check_function_exists(GetProcessTimes HAVE_GETPROCESSTIMES)
+    check_function_exists(GetSystemTimeAsFileTime HAVE_GETSYSTEMTIMEASFILETIME)
+    check_function_exists(MapViewOfFile HAVE_MAPVIEWOFFILE)
+    check_function_exists(VirtualAlloc HAVE_VIRTUALALLOC)
+
     # Windows Winsock2 network structures and functions
     # These are always available on Windows via winsock2.h / ws2tcpip.h
     # Force-set them to 1 to avoid CMake cache issues
@@ -227,6 +235,12 @@ if(WIN32)
     set(HAVE_STRUCT_ADDRINFO 1)
     set(HAVE_STRUCT_POLLFD 1)
     set(HAVE_GETADDRINFO 1)
+    set(HAVE_CLOSESOCKET 1)
+    set(HAVE_SOCKLEN_T 1)
+    set(HAVE_STRUCT_SOCKADDR_IN6 1)
+    set(HAVE_STRUCT_IPV6_MREQ 1)
+    set(HAVE_STRUCT_IP_MREQ_SOURCE 1)
+    set(HAVE_STRUCT_GROUP_SOURCE_REQ 1)
 
     set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES_SAVED})
 
@@ -235,6 +249,58 @@ if(WIN32)
     set(HAVE_IO_H 1)       # <io.h> - _open, _close, _read, _write etc.
     set(HAVE_WINDOWS_H 1)  # <windows.h>
     set(HAVE_SHELLAPI_H 1) # <shellapi.h>
+
+    # Check for DX headers (DirectX graphics)
+    check_include_file("dxgidebug.h" HAVE_DXGIDEBUG_H)
+    check_include_file("dxva.h" HAVE_DXVA_H)
+
+    # Check for bcrypt (Windows cryptography)
+    check_c_source_compiles("
+        #include <windows.h>
+        #include <bcrypt.h>
+        int main(void) {
+            BCRYPT_ALG_HANDLE hAlg;
+            NTSTATUS status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0);
+            return 0;
+        }
+    " HAVE_BCRYPT)
+
+    # DPI awareness context (Windows 10+)
+    check_c_source_compiles("
+        #include <windows.h>
+        int main(void) {
+            DPI_AWARENESS_CONTEXT ctx = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2;
+            return 0;
+        }
+    " HAVE_DPI_AWARENESS_CONTEXT)
+
+    # IDXGIOutput5 (DirectX 12)
+    check_c_source_compiles("
+        #include <dxgi1_5.h>
+        int main(void) {
+            IDXGIOutput5* pOutput = NULL;
+            return 0;
+        }
+    " HAVE_IDXGIOUTPUT5)
+
+    # SECPKGCONTEXT_KEYINGMATERIALINFO (Windows security)
+    check_c_source_compiles("
+        #include <windows.h>
+        #include <sspi.h>
+        int main(void) {
+            SecPkgContext_KeyingMaterialInfo info;
+            return 0;
+        }
+    " HAVE_SECPKGCONTEXT_KEYINGMATERIALINFO)
+
+    # pragma deprecated is supported by MSVC
+    set(HAVE_PRAGMA_DEPRECATED 1)
+
+    # rsync --contimeout is available on most systems
+    set(HAVE_RSYNC_CONTIMEOUT 1)
+
+    # access() function on Windows
+    set(HAVE_ACCESS 1)
 else()
     set(HAVE_SETMODE 0)
     set(HAVE_ALIGNED_MALLOC 0)
