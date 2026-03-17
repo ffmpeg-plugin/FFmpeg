@@ -259,6 +259,7 @@ endif()
 # X86ASM (NASM) support - only applicable on x86/x86_64 architectures
 find_program(NASM_EXECUTABLE nasm)
 find_program(YASM_EXECUTABLE yasm)
+message(STATUS "NASM detection: NASM_EXECUTABLE=${NASM_EXECUTABLE}, YASM_EXECUTABLE=${YASM_EXECUTABLE}, ARCH_X86=${ARCH_X86}")
 if((NASM_EXECUTABLE OR YASM_EXECUTABLE) AND ARCH_X86)
     set(HAVE_X86ASM 1)
     set(NASM_FOUND TRUE)
