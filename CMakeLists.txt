@@ -261,54 +261,82 @@ find_program(NASM_EXECUTABLE nasm)
 find_program(YASM_EXECUTABLE yasm)
 message(STATUS "NASM detection: NASM_EXECUTABLE=${NASM_EXECUTABLE}, YASM_EXECUTABLE=${YASM_EXECUTABLE}, ARCH_X86=${ARCH_X86}")
 if((NASM_EXECUTABLE OR YASM_EXECUTABLE) AND ARCH_X86)
-    set(HAVE_X86ASM 1)
-    set(NASM_FOUND TRUE)
     if(NASM_EXECUTABLE)
         set(NASM_PROGRAM ${NASM_EXECUTABLE})
-        set(CMAKE_ASM_NASM_COMPILER ${NASM_EXECUTABLE})
     else()
         set(NASM_PROGRAM ${YASM_EXECUTABLE})
-        set(CMAKE_ASM_NASM_COMPILER ${YASM_EXECUTABLE})
     endif()
-    # Enable NASM language support at top level (must be done here, not in subdirs)
-    enable_language(ASM_NASM)
-    # Set NASM flags based on architecture and platform
-    if(ARCH_X86_64)
-        set(NASM_ARCH_FLAGS "-DARCH_X86_64=1 -DARCH_X86_32=0")
-    else()
-        set(NASM_ARCH_FLAGS "-DARCH_X86_64=0 -DARCH_X86_32=1")
-    endif()
-    if(APPLE)
-        set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f macho64")
-    elseif(WIN32)
-        set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f win64")
-    else()
-        set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f elf64")
-    endif()
-    # Add include path for config.h and ffmpeg source
-    # -Pconfig.asm: pre-include config.asm before each .asm file (like FFmpeg's Makefile)
-    set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -I${CMAKE_BINARY_DIR}/ -I${CMAKE_SOURCE_DIR}/ -Pconfig.asm")
-    message(STATUS "NASM found: ${NASM_PROGRAM}, flags: ${CMAKE_ASM_NASM_FLAGS}")
+    
+    # Test if NASM works with a simple test file
+    set(_nasm_test_file "${CMAKE_BINARY_DIR}/CMakeFiles/nasm_test.asm")
+    file(WRITE "${_nasm_test_file}" "section .text\n\nglobal _start\n_start:\n    ret\n")
+    
+    # Try to compile the test file
+    execute_process(
+        COMMAND "${NASM_PROGRAM}" -f win64 "${_nasm_test_file}" -o "${CMAKE_BINARY_DIR}/CMakeFiles/nasm_test.obj"
+        RESULT_VARIABLE _nasm_test_result
+        OUTPUT_VARIABLE _nasm_test_output
+        ERROR_VARIABLE _nasm_test_error
+        TIMEOUT 10
+    )
+    
+    file(REMOVE "${_nasm_test_file}")
+    file(REMOVE "${CMAKE_BINARY_DIR}/CMakeFiles/nasm_test.obj" ERROR_QUIET)
+    
+    if(_nasm_test_result EQUAL 0)
+        set(HAVE_X86ASM 1)
+        set(NASM_FOUND TRUE)
+        set(CMAKE_ASM_NASM_COMPILER ${NASM_PROGRAM})
+        
+        # Enable NASM language support at top level (must be done here, not in subdirs)
+        enable_language(ASM_NASM)
+        
+        # Set NASM flags based on architecture and platform
+        if(ARCH_X86_64)
+            set(NASM_ARCH_FLAGS "-DARCH_X86_64=1 -DARCH_X86_32=0")
+        else()
+            set(NASM_ARCH_FLAGS "-DARCH_X86_64=0 -DARCH_X86_32=1")
+        endif()
+        if(APPLE)
+            set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f macho64")
+        elseif(WIN32)
+            set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f win64")
+        else()
+            set(CMAKE_ASM_NASM_FLAGS "${NASM_ARCH_FLAGS} -f elf64")
+        endif()
+        # Add include path for config.h and ffmpeg source
+        # -Pconfig.asm: pre-include config.asm before each .asm file (like FFmpeg's Makefile)
+        set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -I${CMAKE_BINARY_DIR}/ -I${CMAKE_SOURCE_DIR}/ -Pconfig.asm")
+        message(STATUS "NASM found and working: ${NASM_PROGRAM}, flags: ${CMAKE_ASM_NASM_FLAGS}")
 
-    # Helper function: for each .asm source file in a list, add its directory
-    # as a NASM include path via COMPILE_FLAGS property.
-    # This mimics FFmpeg Makefile's -I$(<D)/ which adds the source file's directory.
-    function(nasm_add_source_dir_includes target)
-        get_target_property(sources ${target} SOURCES)
-        foreach(src IN LISTS sources)
-            if(src MATCHES "\\.asm$")
-                get_filename_component(src_dir "${src}" DIRECTORY)
-                if(src_dir)
-                    # src_dir may be relative; make it absolute
-                    if(NOT IS_ABSOLUTE "${src_dir}")
-                        set(src_dir "${CMAKE_CURRENT_SOURCE_DIR}/${src_dir}")
+        # Helper function: for each .asm source file in a list, add its directory
+        # as a NASM include path via COMPILE_FLAGS property.
+        # This mimics FFmpeg Makefile's -I$(<D)/ which adds the source file's directory.
+        function(nasm_add_source_dir_includes target)
+            get_target_property(sources ${target} SOURCES)
+            foreach(src IN LISTS sources)
+                if(src MATCHES "\\.asm$")
+                    get_filename_component(src_dir "${src}" DIRECTORY)
+                    if(src_dir)
+                        # src_dir may be relative; make it absolute
+                        if(NOT IS_ABSOLUTE "${src_dir}")
+                            set(src_dir "${CMAKE_CURRENT_SOURCE_DIR}/${src_dir}")
+                        endif()
+                        set_property(SOURCE "${src}" APPEND_STRING
+                            PROPERTY COMPILE_FLAGS " -I${src_dir}/")
                     endif()
-                    set_property(SOURCE "${src}" APPEND_STRING
-                        PROPERTY COMPILE_FLAGS " -I${src_dir}/")
                 endif()
-            endif()
-        endforeach()
-    endfunction()
+            endforeach()
+        endfunction()
+    else()
+        message(WARNING "NASM found at ${NASM_PROGRAM} but test compilation failed. Disabling NASM support.\nError: ${_nasm_test_error}")
+        set(HAVE_X86ASM 0)
+        set(NASM_FOUND FALSE)
+    endif()
+    
+    unset(_nasm_test_result)
+    unset(_nasm_test_output)
+    unset(_nasm_test_error)
 else()
     set(HAVE_X86ASM 0)
     set(NASM_FOUND FALSE)
