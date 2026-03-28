@@ -1608,6 +1608,11 @@ if(CONFIG_LIBX265)
     list(APPEND avcodec_sources libx265.c)
 endif()
 
+# lcms2 color management
+if(CONFIG_LCMS2)
+    list(APPEND avcodec_sources fflcms2.c)
+endif()
+
 # ============================================================================
 # Generate custom codec_list.c and bsf_list.c based on actually compiled files
 # Strategy: scan allcodecs.c for all extern declarations, then filter by
@@ -1665,90 +1670,55 @@ list(REMOVE_DUPLICATES _codec_symbols)
 list(REMOVE_DUPLICATES _bsf_symbols)
 
 # Step 4: Verify symbols actually exist in compiled sources
-# For symbols defined via macros (like PCM codecs), we use gcc -E to expand macros.
-# For symbols whose source files don't exist at all, we remove them.
-# Strategy: scan avcodec_sources for direct definitions, then use gcc -E for the rest.
+# Method: Use gcc -E to preprocess all source files and check which symbols survive
+# This handles #if CONFIG_XXX conditional compilation correctly
 
-# First, collect symbols found via direct scan of avcodec_sources
 set(_found_codec_syms "")
 set(_found_bsf_syms "")
+
+# Preprocess all avcodec_sources files and collect defined symbols
 foreach(_src IN LISTS avcodec_sources)
     set(_src_abs "${CMAKE_CURRENT_SOURCE_DIR}/${_src}")
     if(NOT EXISTS "${_src_abs}")
         continue()
     endif()
-    file(STRINGS "${_src_abs}" _src_lines
-        REGEX "^(const FFCodec|const FFBitStreamFilter) ff_[a-zA-Z0-9_]+")
-    foreach(_line IN LISTS _src_lines)
-        if(_line MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
-            list(APPEND _found_codec_syms "${CMAKE_MATCH_1}")
-        elseif(_line MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
-            list(APPEND _found_bsf_syms "${CMAKE_MATCH_1}")
-        endif()
-    endforeach()
-endforeach()
-
-# Also scan header files in subdirectories for codec definitions
-# Some codecs are defined in .h files (e.g., aacdec_latm.h, dsddec.h)
-# These headers are #included by .c files and need to be scanned
-set(_header_subdirs aac bsf hevc opus vvc)
-foreach(_hdir IN LISTS _header_subdirs)
-    set(_hdir_path "${CMAKE_CURRENT_SOURCE_DIR}/${_hdir}")
-    if(NOT IS_DIRECTORY "${_hdir_path}")
-        continue()
-    endif()
-    file(GLOB _hfiles "${_hdir_path}/*.h")
-    foreach(_hfile IN LISTS _hfiles)
-        file(STRINGS "${_hfile}" _h_lines
-            REGEX "^(const FFCodec|const FFBitStreamFilter) ff_[a-zA-Z0-9_]+")
-        foreach(_line IN LISTS _h_lines)
-            if(_line MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
+    
+    # Use gcc -E to preprocess and see which symbols are actually defined
+    execute_process(
+        COMMAND ${CMAKE_C_COMPILER} -E -I${CMAKE_SOURCE_DIR} -I${CMAKE_BINARY_DIR}
+                -I${CMAKE_CURRENT_SOURCE_DIR}
+                -DHAVE_AV_CONFIG_H -include ${CMAKE_BINARY_DIR}/config.h
+                "${_src_abs}"
+        OUTPUT_VARIABLE _expanded
+        ERROR_QUIET
+        RESULT_VARIABLE _gcc_result
+        TIMEOUT 30
+    )
+    
+    if(_gcc_result EQUAL 0)
+        # Scan preprocessed output for FFCodec/FFBitStreamFilter definitions
+        string(REGEX MATCHALL "const FFCodec ff_[a-zA-Z0-9_]+" _codec_matches "${_expanded}")
+        string(REGEX MATCHALL "const FFBitStreamFilter ff_[a-zA-Z0-9_]+" _bsf_matches "${_expanded}")
+        
+        foreach(_match IN LISTS _codec_matches)
+            if(_match MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
                 list(APPEND _found_codec_syms "${CMAKE_MATCH_1}")
-            elseif(_line MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
+            endif()
+        endforeach()
+        
+        foreach(_match IN LISTS _bsf_matches)
+            if(_match MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
                 list(APPEND _found_bsf_syms "${CMAKE_MATCH_1}")
             endif()
         endforeach()
-    endforeach()
-endforeach()
-
-# For symbols not found via direct scan, use gcc -E to expand macros
-# Collect symbols still missing
-set(_missing_codec_syms "")
-foreach(_sym IN LISTS _codec_symbols)
-    if(NOT "${_sym}" IN_LIST _found_codec_syms)
-        list(APPEND _missing_codec_syms "${_sym}")
     endif()
 endforeach()
 
-if(_missing_codec_syms)
-    # Use gcc -E to find macro-defined symbols in avcodec_sources
-    # We scan files that are likely to define codecs via macros
-    set(_macro_codec_files pcm.c adpcm.c g711.c g722.c g726.c dpcm.c dsddec.c)
-    foreach(_mfile IN LISTS _macro_codec_files)
-        set(_mfile_abs "${CMAKE_CURRENT_SOURCE_DIR}/${_mfile}")
-        if(NOT EXISTS "${_mfile_abs}")
-            continue()
-        endif()
-        execute_process(
-            COMMAND ${CMAKE_C_COMPILER} -E -I${CMAKE_SOURCE_DIR} -I${CMAKE_BINARY_DIR}
-                    -DHAVE_AV_CONFIG_H -include ${CMAKE_BINARY_DIR}/config.h
-                    "${_mfile_abs}"
-            OUTPUT_VARIABLE _expanded
-            ERROR_QUIET
-            RESULT_VARIABLE _gcc_result
-        )
-        if(_gcc_result EQUAL 0)
-            string(REGEX MATCHALL "const FFCodec ff_[a-zA-Z0-9_]+" _matches "${_expanded}")
-            foreach(_match IN LISTS _matches)
-                if(_match MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
-                    list(APPEND _found_codec_syms "${CMAKE_MATCH_1}")
-                endif()
-            endforeach()
-        endif()
-    endforeach()
-endif()
+# Remove duplicates while preserving order
+list(REMOVE_DUPLICATES _found_codec_syms)
+list(REMOVE_DUPLICATES _found_bsf_syms)
 
-# Final filter: only keep symbols that were found in avcodec_sources
+# Final filter: only keep symbols that were found in preprocessed output
 set(_verified_codec_syms "")
 foreach(_sym IN LISTS _codec_symbols)
     if("${_sym}" IN_LIST _found_codec_syms)
@@ -1761,7 +1731,6 @@ set(_codec_symbols ${_verified_codec_syms})
 set(_verified_bsf_syms "")
 foreach(_sym IN LISTS _bsf_symbols)
     if("${_sym}" IN_LIST _found_bsf_syms)
-        list(APPEND _verified_bsf_syms "${_sym}")
     endif()
 endforeach()
 set(_bsf_symbols ${_verified_bsf_syms})
@@ -1951,7 +1920,7 @@ target_link_libraries(avcodec
         Threads::Threads
 )
 
-# Link optional external libraries
+# Link optional external libraries (standard CMake packages)
 if(CONFIG_ZLIB AND ZLIB_FOUND)
     target_link_libraries(avcodec PRIVATE ZLIB::ZLIB)
 endif()
@@ -1961,14 +1930,8 @@ endif()
 if(CONFIG_BZLIB AND BZIP2_FOUND)
     target_link_libraries(avcodec PRIVATE BZip2::BZip2)
 endif()
-if(CONFIG_LCMS2 AND lcms2_found)
-    if(PC_LCMS2_INCLUDE_DIRS)
-        target_include_directories(avcodec PRIVATE ${PC_LCMS2_INCLUDE_DIRS})
-    endif()
-    if(PC_LCMS2_LDFLAGS)
-        target_link_libraries(avcodec PRIVATE ${PC_LCMS2_LDFLAGS})
-    endif()
-endif()
+
+# External library include/link are handled centrally in cmake/FFmpegApplyExternalLibs.cmake
 
 # Compiler definitions
 target_compile_definitions(avcodec PRIVATE

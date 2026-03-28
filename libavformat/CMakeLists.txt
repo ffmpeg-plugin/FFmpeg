@@ -290,13 +290,7 @@ if(WIN32)
     target_link_libraries(avformat PRIVATE ws2_32)
 endif()
 
-# Link bzip2 if available (needed for matroskadec.c)
-find_library(BZIP2_LIBRARY NAMES bz2 bzip2)
-find_path(BZIP2_INCLUDE_DIR NAMES bzlib.h)
-if(BZIP2_LIBRARY AND BZIP2_INCLUDE_DIR)
-    target_link_libraries(avformat PRIVATE ${BZIP2_LIBRARY})
-    target_include_directories(avformat PRIVATE ${BZIP2_INCLUDE_DIR})
-endif()
+# External library include/link are handled centrally in cmake/FFmpegApplyExternalLibs.cmake
 
 # Compiler definitions
 target_compile_definitions(avformat PRIVATE

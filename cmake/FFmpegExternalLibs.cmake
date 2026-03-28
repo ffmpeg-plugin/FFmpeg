@@ -288,7 +288,9 @@ endif()
 # =============================================================================
 # Line 7239: GnuTLS
 # =============================================================================
-ffmpeg_option(GNUTLS "Enable GnuTLS support" ON)
+# Note: Disabled by default to avoid conflict with OpenSSL
+# If both are detected, configure fails with "must not be enabled at the same time"
+ffmpeg_option(GNUTLS "Enable GnuTLS support" OFF)
 if(ENABLE_GNUTLS)
     ffmpeg_require_pkg_config(gnutls gnutls "gnutls/gnutls.h" "gnutls_global_init")
 else()
@@ -1897,6 +1899,25 @@ endif()
 # =============================================================================
 
 FFmpegDetectLibraries()
+
+# =============================================================================
+# Library Conflict Resolution (matching configure behavior)
+# =============================================================================
+# configure dies with error when conflicting libraries are both enabled
+# We replicate that behavior here
+
+# TLS library conflicts
+if(CONFIG_GNUTLS AND CONFIG_OPENSSL)
+    message(FATAL_ERROR "ERROR: GnuTLS and OpenSSL must not be enabled at the same time.")
+endif()
+
+if(CONFIG_GNUTLS AND CONFIG_MBEDTLS)
+    message(FATAL_ERROR "ERROR: GnuTLS and mbedTLS must not be enabled at the same time.")
+endif()
+
+if(CONFIG_OPENSSL AND CONFIG_MBEDTLS)
+    message(FATAL_ERROR "ERROR: OpenSSL and mbedTLS must not be enabled at the same time.")
+endif()
 
 # =============================================================================
 # Detection summary will be printed after FFmpegDetectLibraries() is called

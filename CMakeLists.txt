@@ -982,6 +982,13 @@ if(BUILD_TESTING)
 endif()
 
 # =============================================================================
+# Apply External Libraries to Targets (Centralized Handling)
+# =============================================================================
+# This must be called AFTER all add_subdirectory() so all targets exist
+include(FFmpegApplyExternalLibs)
+ffmpeg_apply_external_libs()
+
+# =============================================================================
 # Summary
 # =============================================================================
 
