@@ -502,6 +502,17 @@ foreach(_item IN LISTS ALL_CODECS ALL_MUXERS ALL_DEMUXERS ALL_PROTOCOLS ALL_FILT
     list(APPEND _already_written "${_item}")
 endforeach()
 
+# Also exclude variables already defined in config.h.in to prevent
+# macro redefinition warnings (e.g. CONFIG_VULKAN defined in both files)
+if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/config.h.in")
+    file(STRINGS "${CMAKE_SOURCE_DIR}/cmake/config.h.in" _config_h_lines)
+    foreach(_line IN LISTS _config_h_lines)
+        if(_line MATCHES "#define CONFIG_([A-Z0-9_]+)")
+            list(APPEND _already_written "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+endif()
+
 # Scan all variables for dependency-defined components
 get_cmake_property(_all_vars VARIABLES)
 set(_internal_subsystems "")
