@@ -121,6 +121,21 @@ function(ffmpeg_apply_external_libs)
         _ffmpeg_apply_lib_to_target(GNUTLS avcodec)
         _ffmpeg_apply_lib_to_target(MEDTLS avcodec)
         _ffmpeg_apply_lib_to_target(LIBX265 avcodec)
+        
+        # System compression/utility libraries used by various codecs
+        # LZMA: CONFIG_LZMA is set but find_package(LibLZMA) sets LIBLZMA_LIBRARIES
+        if(CONFIG_LZMA)
+            if(TARGET LibLZMA::LibLZMA)
+                target_link_libraries(avcodec PRIVATE LibLZMA::LibLZMA)
+            elseif(LIBLZMA_LIBRARIES)
+                target_link_libraries(avcodec PRIVATE ${LIBLZMA_LIBRARIES})
+            else()
+                target_link_libraries(avcodec PRIVATE lzma)
+            endif()
+        endif()
+        _ffmpeg_apply_lib_to_target(ZLIB avcodec)
+        _ffmpeg_apply_lib_to_target(BZIP2 avcodec)
+        _ffmpeg_apply_lib_to_target(Iconv avcodec)
     endif()
     
     # -------------------------------------------------------------------------
