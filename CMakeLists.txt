@@ -179,28 +179,10 @@ if(WIN32)
     set(HAVE_WS2TCPIP_H 1)
 else()
     # POSIX systems
-    # On macOS, socklen_t is always available (it's defined in system headers)
-    # but check_c_source_compiles fails without _DARWIN_C_SOURCE on Apple platforms.
-    # Use force-set approach for macOS to avoid CMake detection issues.
-    set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
-    if(APPLE)
-        # On macOS, socklen_t is always present (required by POSIX)
-        set(HAVE_SOCKLEN_T 1)
-    else()
-        # Need to include <sys/socket.h> for socklen_t detection
-        # Some platforms require feature test macros
-        set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
-        set(CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS} -D_GNU_SOURCE")
-        check_c_source_compiles("
-            #include <sys/types.h>
-            #include <sys/socket.h>
-            int main(void) { socklen_t x = 0; (void)x; return 0; }
-        " HAVE_SOCKLEN_T)
-        set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS_SAVE})
-        if(NOT HAVE_SOCKLEN_T)
-            set(HAVE_SOCKLEN_T 0)
-        endif()
-    endif()
+    # socklen_t is defined by POSIX.1-2001 and available on all modern POSIX systems
+    # (Linux, macOS, BSDs, etc.). Force-set to 1 to avoid CMake detection issues
+    # with check_c_source_compiles (ccache, cross-compilation, etc.)
+    set(HAVE_SOCKLEN_T 1)
 
     check_c_source_compiles("
         #include <sys/types.h>
