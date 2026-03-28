@@ -50,3 +50,5 @@
 /libavfilter/vulkan/*.c
 /.*/
 !/.forgejo/
+build/
+build_verify/

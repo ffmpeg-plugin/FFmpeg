@@ -1054,7 +1054,7 @@ set(avcodec_external_lib_files
     # AudioToolbox (macOS only)
     audiotoolboxdec.c audiotoolboxenc.c
     # VideoToolbox (macOS only)
-    videotoolbox.c videotoolboxenc.c
+    videotoolbox.c videotoolboxenc.c videotoolbox_av1.c videotoolbox_vp9.c
     # MediaCodec (Android only)
     mediacodec_dec.c mediacodec_enc.c mediacodec_wrapper.c
     mediacodec_surface.c mediacodecdec.c mediacodecenc.c
@@ -1243,7 +1243,7 @@ foreach(_src_abs IN LISTS _all_avcodec_c)
         continue()
     endif()
     # Skip VideoToolbox files (handled in conditional section below)
-    if("${_src_name}" MATCHES "^videotoolbox\\.c$|^videotoolboxenc\\.c$")
+    if("${_src_name}" MATCHES "^videotoolbox")
         list(APPEND avcodec_glob_excluded "${_src_name}")
         continue()
     endif()
@@ -1325,6 +1325,12 @@ if(APPLE AND CONFIG_VIDEOTOOLBOX)
     list(APPEND avcodec_sources
         videotoolbox.c videotoolboxenc.c
     )
+    if(CONFIG_AV1_VIDEOTOOLBOX_HWACCEL)
+        list(APPEND avcodec_sources videotoolbox_av1.c)
+    endif()
+    if(CONFIG_VP9_VIDEOTOOLBOX_HWACCEL)
+        list(APPEND avcodec_sources videotoolbox_vp9.c)
+    endif()
 endif()
 
 # AudioToolbox (macOS/iOS audio codecs)
