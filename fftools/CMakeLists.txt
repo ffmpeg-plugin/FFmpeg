@@ -263,6 +263,11 @@ if(ENABLE_FFPLAY)
                 ${SDL2_INCLUDE_DIRS}
         )
         
+        # Add libplacebo include if enabled (needed by ffplay_renderer.c)
+        if(CONFIG_LIBPLACEBO AND PC_LIBPLACEBO_INCLUDE_DIRS)
+            target_include_directories(ffplay PRIVATE ${PC_LIBPLACEBO_INCLUDE_DIRS})
+        endif()
+        
         # Link libraries
         set(FFPLAY_LINK_LIBS
             avdevice
