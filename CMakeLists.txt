@@ -120,33 +120,18 @@ include(FFmpegCompilerFlags)
 include(FFmpegUtils)
 
 # =============================================================================
-# L2: Component Dependency Resolution
+# L2: Component Dependency Resolution (definitions loaded here, resolution deferred)
 # =============================================================================
 
 # Load component dependency definitions (from configure _deps/_select)
 include(FFmpegComponentDeps)
 
-# Load dependency resolver
+# Load dependency resolver (defines ffmpeg_resolve_all_dependencies function)
 include(FFmpegDependencyResolver)
 
-# Resolve all component dependencies
-# This links L1 (external libraries) to L2 (components) via _SELECT relationships
-ffmpeg_resolve_all_dependencies()
-
-# =============================================================================
-# Component Selection (Legacy - generates list files)
-# =============================================================================
-
-# Set library enable flags for FFmpegComponents module
-set(FFMPEG_ENABLE_avutil     1)  # Always enabled
-set(FFMPEG_ENABLE_avcodec    ${ENABLE_AVCODEC})
-set(FFMPEG_ENABLE_avformat   ${ENABLE_AVFORMAT})
-set(FFMPEG_ENABLE_avfilter   ${ENABLE_AVFILTER})
-set(FFMPEG_ENABLE_avdevice   ${ENABLE_AVDEVICE})
-set(FFMPEG_ENABLE_swscale    ${ENABLE_SWSCALE})
-set(FFMPEG_ENABLE_swresample ${ENABLE_SWRESAMPLE})
-
-include(FFmpegComponents)
+# NOTE: ffmpeg_resolve_all_dependencies() is called LATER, after all CONFIG_*
+# platform variables are set (around line 760+). This ensures the resolver can
+# see CONFIG_VIDEOTOOLBOX, CONFIG_PTHREADS, etc.
 
 # =============================================================================
 # Essential Variables
@@ -490,14 +475,9 @@ else()
 endif()
 
 # Internal features
-set(CONFIG_DWT 1)
-set(CONFIG_ERROR_RESILIENCE 1)
-set(CONFIG_FAAN 1)
+# Internal features - only set those not covered by _select chains
 set(CONFIG_FAST_UNALIGNED ${HAVE_FAST_UNALIGNED})
-set(CONFIG_IAMF 1)
-set(CONFIG_LSP 1)
 set(CONFIG_PIXELUTILS 1)
-set(CONFIG_NETWORK 1)
 
 # Assembler features (defaults, may be overridden by arch detection)
 foreach(var AS_ARCH_DIRECTIVE AS_ARCHEXT_CRC_DIRECTIVE AS_ARCHEXT_DOTPROD_DIRECTIVE
@@ -621,6 +601,37 @@ if(APPLE)
     set(CONFIG_AVFOUNDATION 1)
     set(CONFIG_COREIMAGE 1)
     set(CONFIG_METAL 0)
+
+    # Set implied feature flags for dependency resolver
+    # These correspond to configure's check_func/check_header results
+    # that are referenced in FFmpegComponentDeps.cmake _DEPS
+    set(CONFIG_COREFOUNDATION 1)
+    set(CONFIG_COREMEDIA 1)
+    set(CONFIG_COREVIDEO 1)
+    set(CONFIG_CORESERVICES 1)
+    # VideoToolbox function availability (assumed present on modern macOS)
+    set(CONFIG_VTDECOMPRESSIONSESSIONDECODEFRAME 1)
+    set(CONFIG_VTCOMPRESSIONSESSIONPREPARETOENCODEFRAMES 1)
+    set(CONFIG_VTPIXELTRANSFERSESSIONCREATE 1)
+    set(CONFIG_VTPIXELROTATIONSESSIONCREATE 1)
+    # AudioToolbox feature availability
+    set(CONFIG_AUDIOOBJECTPROPERTYADDRESS 0)  # Not always available
+    # Pthreads (needed by VT encoder deps)
+    set(CONFIG_PTHREADS ${HAVE_PTHREADS})
+
+    # VideoToolbox/CoreVideo enum availability (present on modern macOS 10.13+)
+    set(HAVE_KCMVIDEOCODECTYPE_HEVC 1)
+    set(HAVE_KCMVIDEOCODECTYPE_HEVCWITHALPHA 1)
+    set(HAVE_KCMVIDEOCODECTYPE_VP9 1)
+    set(HAVE_KCMVIDEOCODECTYPE_AV1 1)
+    set(HAVE_KCVPIXELFORMATTYPE_420YPCBCR10BIPLANARVIDEORANGE 1)
+    set(HAVE_KCVPIXELFORMATTYPE_422YPCBCR8BIPLANARVIDEORANGE 1)
+    set(HAVE_KCVPIXELFORMATTYPE_422YPCBCR10BIPLANARVIDEORANGE 1)
+    set(HAVE_KCVPIXELFORMATTYPE_422YPCBCR16BIPLANARVIDEORANGE 1)
+    set(HAVE_KCVPIXELFORMATTYPE_444YPCBCR8BIPLANARVIDEORANGE 1)
+    set(HAVE_KCVPIXELFORMATTYPE_444YPCBCR10BIPLANARVIDEORANGE 1)
+    set(HAVE_KCVPIXELFORMATTYPE_444YPCBCR16BIPLANARVIDEORANGE 1)
+    set(HAVE_KVTQPMODULATIONLEVEL_DEFAULT 1)
 else()
     set(CONFIG_VIDEOTOOLBOX 0)
     set(CONFIG_AUDIOTOOLBOX 0)
@@ -628,6 +639,16 @@ else()
     set(CONFIG_AVFOUNDATION 0)
     set(CONFIG_COREIMAGE 0)
     set(CONFIG_METAL 0)
+    set(CONFIG_COREFOUNDATION 0)
+    set(CONFIG_COREMEDIA 0)
+    set(CONFIG_COREVIDEO 0)
+    set(CONFIG_CORESERVICES 0)
+    set(CONFIG_VTDECOMPRESSIONSESSIONDECODEFRAME 0)
+    set(CONFIG_VTCOMPRESSIONSESSIONPREPARETOENCODEFRAMES 0)
+    set(CONFIG_VTPIXELTRANSFERSESSIONCREATE 0)
+    set(CONFIG_VTPIXELROTATIONSESSIONCREATE 0)
+    set(CONFIG_AUDIOOBJECTPROPERTYADDRESS 0)
+    set(CONFIG_PTHREADS ${HAVE_PTHREADS})
 endif()
 
 # Note: VAAPI, VDPAU, ALSA are auto-detected by FFmpegDetectLibraries()
@@ -678,133 +699,82 @@ set(CONFIG_PROTOCOLS 1)
 set(CONFIG_TLS_PROTOCOL 1)
 set(CONFIG_DTLS_PROTOCOL 0)
 
-# Device configuration
-set(CONFIG_LAVFI_INDEV 1)
-if(APPLE)
-    set(CONFIG_AVFOUNDATION_INDEV 1)
-    set(CONFIG_AUDIOTOOLBOX_OUTDEV 1)
-else()
-    set(CONFIG_AVFOUNDATION_INDEV 0)
-    set(CONFIG_AUDIOTOOLBOX_OUTDEV 0)
-endif()
+# Device configuration - handled by dependency resolver based on platform deps
+# CONFIG_LAVFI_INDEV, CONFIG_AVFOUNDATION_INDEV, CONFIG_AUDIOTOOLBOX_OUTDEV
+# are resolved by FFmpegDependencyResolver based on their _DEPS definitions
 
-# Internal codec subsystem configs (needed by config.h)
-set(CONFIG_AANDCTTABLES 1)
-set(CONFIG_AC3DSP 1)
-set(CONFIG_ADTS_HEADER 1)
-set(CONFIG_ATSC_A53 1)
-set(CONFIG_AUDIO_FRAME_QUEUE 1)
-set(CONFIG_AUDIODSP 1)
-set(CONFIG_BLOCKDSP 1)
-set(CONFIG_BSWAPDSP 1)
-set(CONFIG_CABAC 1)
-set(CONFIG_CBS 1)
-set(CONFIG_CBS_APV 1)
-set(CONFIG_CBS_AV1 1)
-set(CONFIG_CBS_H264 1)
-set(CONFIG_CBS_H265 1)
-set(CONFIG_CBS_H266 1)
-set(CONFIG_CBS_JPEG 1)
+# Internal codec subsystem configs
+# NOTE: Most internal subsystems (ATSC_A53, GOLOMB, H264DSP, etc.) are now
+# automatically enabled by the dependency resolver via _select chains.
+# For example: CONFIG_LIBX264_ENCODER -> _select -> ATSC_A53, GOLOMB
+# Only set subsystems here that are NOT covered by _select chains or need
+# special handling.
+
+# Zlib-dependent wrappers
+set(CONFIG_DEFLATE_WRAPPER ${CONFIG_ZLIB})
+set(CONFIG_INFLATE_WRAPPER ${CONFIG_ZLIB})
+
+# Features that are always enabled (not controlled by _select)
+set(CONFIG_NETWORK 1)
+set(CONFIG_FRAME_THREAD_ENCODER 1)
+
+# Features explicitly disabled (require specific detection)
+set(CONFIG_DNN 0)
+set(CONFIG_EVCPARSE 0)
 set(CONFIG_CBS_LCEVC 0)
-set(CONFIG_CBS_MPEG2 1)
-set(CONFIG_CBS_VP8 1)
-set(CONFIG_CBS_VP9 1)
-set(CONFIG_CELP_MATH 1)
+set(CONFIG_LIBX262 0)
+set(CONFIG_LIBX264_HDR10 0)
+set(CONFIG_SNAPPY 0)
+
+# D3D12 features (Windows only, require specific detection)
 set(CONFIG_D3D12_INTRA_REFRESH 0)
 set(CONFIG_D3D12_MOTION_ESTIMATOR 0)
 set(CONFIG_D3D12_VIDEO_PROCESS_REFERENCE_INFO 0)
 set(CONFIG_D3D12VA_ENCODE 0)
 set(CONFIG_D3D12VA_ME_PRECISION_EIGHTH_PIXEL 0)
-set(CONFIG_DEFLATE_WRAPPER ${CONFIG_ZLIB})
-set(CONFIG_DIRAC_PARSE 1)
-set(CONFIG_DNN 0)
-set(CONFIG_DOVI_RPUDEC 1)
-set(CONFIG_DOVI_RPUENC 1)
-set(CONFIG_DVPROFILE 1)
-set(CONFIG_EVCPARSE 0)
-set(CONFIG_FAANDCT 1)
-set(CONFIG_FAANIDCT 1)
-set(CONFIG_FDCTDSP 1)
-set(CONFIG_FMTCONVERT 1)
-set(CONFIG_FRAME_THREAD_ENCODER 1)
-set(CONFIG_G722DSP 1)
-set(CONFIG_GOLOMB 1)
-set(CONFIG_GPLV3 0)
-set(CONFIG_H263DSP 1)
-set(CONFIG_H264CHROMA 1)
-set(CONFIG_H264DSP 1)
-set(CONFIG_H264PARSE 1)
-set(CONFIG_H264PRED 1)
-set(CONFIG_H264QPEL 1)
-set(CONFIG_H264_SEI 1)
-set(CONFIG_HEVCPARSE 1)
-set(CONFIG_HEVC_SEI 1)
-set(CONFIG_HPELDSP 1)
-set(CONFIG_HUFFMAN 1)
-set(CONFIG_HUFFYUVDSP 1)
-set(CONFIG_HUFFYUVENCDSP 1)
-set(CONFIG_IAMFDEC 1)
-set(CONFIG_IAMFENC 1)
-set(CONFIG_IDCTDSP 1)
-set(CONFIG_INFLATE_WRAPPER ${CONFIG_ZLIB})
-set(CONFIG_INTRAX8 1)
-set(CONFIG_ISO_MEDIA 1)
-set(CONFIG_ISO_WRITER 1)
-set(CONFIG_IVIDSP 1)
-set(CONFIG_JPEGTABLES 1)
-set(CONFIG_LGPLV3 0)
-set(CONFIG_LIBX262 0)
-set(CONFIG_LIBX264_HDR10 0)
-set(CONFIG_LLAUDDSP 1)
-set(CONFIG_LLVIDDSP 1)
-set(CONFIG_LLVIDENCDSP 1)
-set(CONFIG_LPC 1)
-set(CONFIG_LZF 1)
-set(CONFIG_ME_CMP 1)
-set(CONFIG_MPEG_ER 1)
-set(CONFIG_MPEGAUDIO 1)
-set(CONFIG_MPEGAUDIODSP 1)
-set(CONFIG_MPEGAUDIOHEADER 1)
-set(CONFIG_MPEG4AUDIO 1)
-set(CONFIG_MPEGVIDEO 1)
-set(CONFIG_MPEGVIDEODEC 1)
-set(CONFIG_MPEGVIDEOENC 1)
-set(CONFIG_MPEGVIDEOENCDSP 1)
-set(CONFIG_MSMPEG4DEC 1)
-set(CONFIG_MSMPEG4ENC 1)
-set(CONFIG_MSS34DSP 1)
-set(CONFIG_PIXBLOCKDSP 1)
-set(CONFIG_QPELDSP 1)
+
+# QSV features (require Intel QSV detection)
 set(CONFIG_QSV 0)
 set(CONFIG_QSVDEC 0)
 set(CONFIG_QSVENC 0)
 set(CONFIG_QSVVPP 0)
-set(CONFIG_RANGECODER 1)
-set(CONFIG_RIFFDEC 1)
-set(CONFIG_RIFFENC 1)
-set(CONFIG_RTPDEC 1)
-set(CONFIG_RTPENC_CHAIN 1)
-set(CONFIG_RV34DSP 1)
-set(CONFIG_SCENE_SAD 1)
-set(CONFIG_SINEWIN 1)
-set(CONFIG_SMPTE_436M 1)
-set(CONFIG_SNAPPY 0)
-set(CONFIG_SRTP 1)
-set(CONFIG_STARTCODE 1)
-set(CONFIG_TEXTUREDSP 1)
-set(CONFIG_TEXTUREDSPENC 1)
-set(CONFIG_TPELDSP 1)
+
+# VAAPI/Vulkan encode features
 set(CONFIG_VAAPI_1 0)
 set(CONFIG_VAAPI_ENCODE 0)
 set(CONFIG_VULKAN_1_4 0)
-set(CONFIG_VC1DSP 1)
-set(CONFIG_VIDEODSP 1)
-set(CONFIG_VP3DSP 1)
-set(CONFIG_VP8DSP 1)
 set(CONFIG_VULKAN_ENCODE 0)
-set(CONFIG_VVC_SEI 1)
-set(CONFIG_WMA_FREQS 1)
-set(CONFIG_WMV2DSP 1)
+
+# License flags (ensure set for config.h)
+set(CONFIG_GPLV3 0)
+set(CONFIG_LGPLV3 0)
+if(ENABLE_GPL AND ENABLE_VERSION3)
+    set(CONFIG_GPLV3 1)
+endif()
+if(ENABLE_VERSION3)
+    set(CONFIG_LGPLV3 1)
+endif()
+
+# =============================================================================
+# L2+L3: Dependency Resolution & Component Generation
+# NOW all CONFIG_* platform variables are set, so the resolver can see them.
+# =============================================================================
+
+# Resolve all component dependencies
+# This links L1 (external libraries) to L2 (components) via _SELECT relationships
+ffmpeg_resolve_all_dependencies()
+
+# Set library enable flags for FFmpegComponents module
+set(FFMPEG_ENABLE_avutil     1)  # Always enabled
+set(FFMPEG_ENABLE_avcodec    ${ENABLE_AVCODEC})
+set(FFMPEG_ENABLE_avformat   ${ENABLE_AVFORMAT})
+set(FFMPEG_ENABLE_avfilter   ${ENABLE_AVFILTER})
+set(FFMPEG_ENABLE_avdevice   ${ENABLE_AVDEVICE})
+set(FFMPEG_ENABLE_swscale    ${ENABLE_SWSCALE})
+set(FFMPEG_ENABLE_swresample ${ENABLE_SWRESAMPLE})
+
+# Generate config_components.h and component list files
+include(FFmpegComponents)
 
 # =============================================================================
 # config_components.h is generated by FFmpegComponents.cmake

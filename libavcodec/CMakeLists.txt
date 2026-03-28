@@ -84,676 +84,554 @@ avcodec_scan_subdir(bsf)
 
 # Internal subsystems
 # AANDCTTABLES
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aandcttab.c")
+if(CONFIG_AANDCTTABLES)
     list(APPEND avcodec_sources aandcttab.c)
 endif()
 
 
 # AC3DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3dsp.c")
+if(CONFIG_AC3DSP)
     list(APPEND avcodec_sources ac3dsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3.c")
     list(APPEND avcodec_sources ac3.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3tab.c")
     list(APPEND avcodec_sources ac3tab.c)
 endif()
 
 
 # ADTS_HEADER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/adts_header.c")
+if(CONFIG_ADTS_HEADER)
     list(APPEND avcodec_sources adts_header.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4audio_sample_rates.c")
     list(APPEND avcodec_sources mpeg4audio_sample_rates.c)
 endif()
 
 
 # AUDIO_FRAME_QUEUE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/audio_frame_queue.c")
+if(CONFIG_AUDIO_FRAME_QUEUE)
     list(APPEND avcodec_sources audio_frame_queue.c)
 endif()
 
 
 # ATSC_A53
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/atsc_a53.c")
+if(CONFIG_ATSC_A53)
     list(APPEND avcodec_sources atsc_a53.c)
 endif()
 
 
 # AUDIODSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/audiodsp.c")
+if(CONFIG_AUDIODSP)
     list(APPEND avcodec_sources audiodsp.c)
 endif()
 
 
 # BLOCKDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/blockdsp.c")
+if(CONFIG_BLOCKDSP)
     list(APPEND avcodec_sources blockdsp.c)
 endif()
 
 
 # BSWAPDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bswapdsp.c")
+if(CONFIG_BSWAPDSP)
     list(APPEND avcodec_sources bswapdsp.c)
 endif()
 
 
 # CABAC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cabac.c")
+if(CONFIG_CABAC)
     list(APPEND avcodec_sources cabac.c)
 endif()
 
 
 # CBS
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs.c")
+if(CONFIG_CBS)
     list(APPEND avcodec_sources cbs.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_bsf.c")
     list(APPEND avcodec_sources cbs_bsf.c)
 endif()
 
 
 # CBS_APV
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_apv.c")
+if(CONFIG_CBS_APV)
     list(APPEND avcodec_sources cbs_apv.c)
 endif()
 
 
 # CBS_AV1
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_av1.c")
+if(CONFIG_CBS_AV1)
     list(APPEND avcodec_sources cbs_av1.c)
 endif()
 
 
 # CBS_H264
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_h264.c")
+if(CONFIG_CBS_H264)
     list(APPEND avcodec_sources cbs_h264.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_h2645.c")
     list(APPEND avcodec_sources cbs_h2645.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_sei.c")
     list(APPEND avcodec_sources cbs_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_parse.c")
     list(APPEND avcodec_sources h2645_parse.c)
 endif()
 
 
 # CBS_H265
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_h265.c")
+if(CONFIG_CBS_H265)
     list(APPEND avcodec_sources cbs_h265.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_h2645.c")
     list(APPEND avcodec_sources cbs_h2645.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_sei.c")
     list(APPEND avcodec_sources cbs_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_parse.c")
     list(APPEND avcodec_sources h2645_parse.c)
 endif()
 
 
 # CBS_H266
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_h266.c")
+if(CONFIG_CBS_H266)
     list(APPEND avcodec_sources cbs_h266.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_h2645.c")
     list(APPEND avcodec_sources cbs_h2645.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_sei.c")
     list(APPEND avcodec_sources cbs_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_parse.c")
     list(APPEND avcodec_sources h2645_parse.c)
 endif()
 
 
 # CBS_JPEG
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_jpeg.c")
+if(CONFIG_CBS_JPEG)
     list(APPEND avcodec_sources cbs_jpeg.c)
 endif()
 
 
 # CBS_MPEG2
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_mpeg2.c")
+if(CONFIG_CBS_MPEG2)
     list(APPEND avcodec_sources cbs_mpeg2.c)
 endif()
 
 
 # CBS_VP8
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_vp8.c")
+if(CONFIG_CBS_VP8)
     list(APPEND avcodec_sources cbs_vp8.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp8data.c")
     list(APPEND avcodec_sources vp8data.c)
 endif()
 
 
 # CBS_VP9
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbs_vp9.c")
+if(CONFIG_CBS_VP9)
     list(APPEND avcodec_sources cbs_vp9.c)
 endif()
 
 
 # CELP_MATH
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/celp_math.c")
+if(CONFIG_CELP_MATH)
     list(APPEND avcodec_sources celp_math.c)
 endif()
 
 
 # DOVI_RPUDEC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dovi_rpu.c")
+if(CONFIG_DOVI_RPUDEC)
     list(APPEND avcodec_sources dovi_rpu.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dovi_rpudec.c")
     list(APPEND avcodec_sources dovi_rpudec.c)
 endif()
 
 
 # DOVI_RPUENC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dovi_rpu.c")
+if(CONFIG_DOVI_RPUENC)
     list(APPEND avcodec_sources dovi_rpu.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dovi_rpuenc.c")
     list(APPEND avcodec_sources dovi_rpuenc.c)
 endif()
 
 
 # ERROR_RESILIENCE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/error_resilience.c")
+if(CONFIG_ERROR_RESILIENCE)
     list(APPEND avcodec_sources error_resilience.c)
 endif()
 
 
 # FAANDCT
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/faandct.c")
+if(CONFIG_FAANDCT)
     list(APPEND avcodec_sources faandct.c)
 endif()
 
 
 # FAANIDCT
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/faanidct.c")
+if(CONFIG_FAANIDCT)
     list(APPEND avcodec_sources faanidct.c)
 endif()
 
 
 # FDCTDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/fdctdsp.c")
+if(CONFIG_FDCTDSP)
     list(APPEND avcodec_sources fdctdsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/jfdctfst.c")
     list(APPEND avcodec_sources jfdctfst.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/jfdctint.c")
     list(APPEND avcodec_sources jfdctint.c)
 endif()
 
 
 # FMTCONVERT
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/fmtconvert.c")
+if(CONFIG_FMTCONVERT)
     list(APPEND avcodec_sources fmtconvert.c)
 endif()
 
 
 # GOLOMB
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/golomb.c")
+if(CONFIG_GOLOMB)
     list(APPEND avcodec_sources golomb.c)
 endif()
 
 
 # H263DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h263dsp.c")
+if(CONFIG_H263DSP)
     list(APPEND avcodec_sources h263dsp.c)
 endif()
 
 
 # H264CHROMA
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264chroma.c")
+if(CONFIG_H264CHROMA)
     list(APPEND avcodec_sources h264chroma.c)
 endif()
 
 
 # H264DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264dsp.c")
+if(CONFIG_H264DSP)
     list(APPEND avcodec_sources h264dsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264idct.c")
     list(APPEND avcodec_sources h264idct.c)
 endif()
 
 
 # H264PARSE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_parse.c")
+if(CONFIG_H264PARSE)
     list(APPEND avcodec_sources h264_parse.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_ps.c")
     list(APPEND avcodec_sources h264_ps.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264data.c")
     list(APPEND avcodec_sources h264data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645data.c")
     list(APPEND avcodec_sources h2645data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_parse.c")
     list(APPEND avcodec_sources h2645_parse.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_vui.c")
     list(APPEND avcodec_sources h2645_vui.c)
 endif()
 
 
 # H264PRED
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264pred.c")
+if(CONFIG_H264PRED)
     list(APPEND avcodec_sources h264pred.c)
 endif()
 
 
 # H264QPEL
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264qpel.c")
+if(CONFIG_H264QPEL)
     list(APPEND avcodec_sources h264qpel.c)
 endif()
 
 
 # H264_SEI
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_sei.c")
+if(CONFIG_H264_SEI)
     list(APPEND avcodec_sources h264_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_sei.c")
     list(APPEND avcodec_sources h2645_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aom_film_grain.c")
     list(APPEND avcodec_sources aom_film_grain.c)
 endif()
 
 
 # HEVCPARSE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645data.c")
+if(CONFIG_HEVCPARSE)
     list(APPEND avcodec_sources h2645data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_parse.c")
     list(APPEND avcodec_sources h2645_parse.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_vui.c")
     list(APPEND avcodec_sources h2645_vui.c)
 endif()
 
 
 # HEVC_SEI
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h2645_sei.c")
+if(CONFIG_HEVC_SEI)
     list(APPEND avcodec_sources h2645_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aom_film_grain.c")
     list(APPEND avcodec_sources aom_film_grain.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dynamic_hdr_vivid.c")
     list(APPEND avcodec_sources dynamic_hdr_vivid.c)
 endif()
 
 
 # HPELDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/hpeldsp.c")
+if(CONFIG_HPELDSP)
     list(APPEND avcodec_sources hpeldsp.c)
 endif()
 
 
 # HUFFMAN
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/huffman.c")
+if(CONFIG_HUFFMAN)
     list(APPEND avcodec_sources huffman.c)
 endif()
 
 
 # HUFFYUVDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/huffyuvdsp.c")
+if(CONFIG_HUFFYUVDSP)
     list(APPEND avcodec_sources huffyuvdsp.c)
 endif()
 
 
 # HUFFYUVENCDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/huffyuvencdsp.c")
+if(CONFIG_HUFFYUVENCDSP)
     list(APPEND avcodec_sources huffyuvencdsp.c)
 endif()
 
 
 # IDCTDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/idctdsp.c")
+if(CONFIG_IDCTDSP)
     list(APPEND avcodec_sources idctdsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/simple_idct.c")
     list(APPEND avcodec_sources simple_idct.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/jrevdct.c")
     list(APPEND avcodec_sources jrevdct.c)
 endif()
 
 
 # INTRAX8
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/intrax8.c")
+if(CONFIG_INTRAX8)
     list(APPEND avcodec_sources intrax8.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/intrax8dsp.c")
     list(APPEND avcodec_sources intrax8dsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4_vc1_data.c")
     list(APPEND avcodec_sources msmpeg4_vc1_data.c)
 endif()
 
 
 # IVIDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ivi_dsp.c")
+if(CONFIG_IVIDSP)
     list(APPEND avcodec_sources ivi_dsp.c)
 endif()
 
 
 # JPEGTABLES
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/jpegtables.c")
+if(CONFIG_JPEGTABLES)
     list(APPEND avcodec_sources jpegtables.c)
 endif()
 
 
 # LLAUDDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lossless_audiodsp.c")
+if(CONFIG_LLAUDDSP)
     list(APPEND avcodec_sources lossless_audiodsp.c)
 endif()
 
 
 # LLVIDDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lossless_videodsp.c")
+if(CONFIG_LLVIDDSP)
     list(APPEND avcodec_sources lossless_videodsp.c)
 endif()
 
 
 # LLVIDENCDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lossless_videoencdsp.c")
+if(CONFIG_LLVIDENCDSP)
     list(APPEND avcodec_sources lossless_videoencdsp.c)
 endif()
 
 
 # LPC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lpc.c")
+if(CONFIG_LPC)
     list(APPEND avcodec_sources lpc.c)
 endif()
 
 
 # LSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lsp.c")
+if(CONFIG_LSP)
     list(APPEND avcodec_sources lsp.c)
 endif()
 
 
 # LZF
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lzf.c")
+if(CONFIG_LZF)
     list(APPEND avcodec_sources lzf.c)
 endif()
 
 
 # ME_CMP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/me_cmp.c")
+if(CONFIG_ME_CMP)
     list(APPEND avcodec_sources me_cmp.c)
 endif()
 
 
 # MPEG_ER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg_er.c")
+if(CONFIG_MPEG_ER)
     list(APPEND avcodec_sources mpeg_er.c)
 endif()
 
 
 # MPEGAUDIO
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudio.c")
+if(CONFIG_MPEGAUDIO)
     list(APPEND avcodec_sources mpegaudio.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodec_common.c")
     list(APPEND avcodec_sources mpegaudiodec_common.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodata.c")
     list(APPEND avcodec_sources mpegaudiodata.c)
 endif()
 
 
 # MPEGAUDIODSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodsp.c")
+if(CONFIG_MPEGAUDIODSP)
     list(APPEND avcodec_sources mpegaudiodsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodsp_data.c")
     list(APPEND avcodec_sources mpegaudiodsp_data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodsp_fixed.c")
     list(APPEND avcodec_sources mpegaudiodsp_fixed.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodsp_float.c")
     list(APPEND avcodec_sources mpegaudiodsp_float.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dct32_fixed.c")
     list(APPEND avcodec_sources dct32_fixed.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dct32_float.c")
     list(APPEND avcodec_sources dct32_float.c)
 endif()
 
 
 # MPEGAUDIOHEADER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodecheader.c")
+if(CONFIG_MPEGAUDIOHEADER)
     list(APPEND avcodec_sources mpegaudiodecheader.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiotabs.c")
     list(APPEND avcodec_sources mpegaudiotabs.c)
 endif()
 
 
 # MPEG4AUDIO
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4audio.c")
+if(CONFIG_MPEG4AUDIO)
     list(APPEND avcodec_sources mpeg4audio.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4audio_sample_rates.c")
     list(APPEND avcodec_sources mpeg4audio_sample_rates.c)
 endif()
 
 
 # MPEGVIDEO
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideo.c")
+if(CONFIG_MPEGVIDEO)
     list(APPEND avcodec_sources mpegvideo.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rl.c")
     list(APPEND avcodec_sources rl.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideo_motion.c")
     list(APPEND avcodec_sources mpegvideo_motion.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideo_unquantize.c")
     list(APPEND avcodec_sources mpegvideo_unquantize.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideodata.c")
     list(APPEND avcodec_sources mpegvideodata.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegpicture.c")
     list(APPEND avcodec_sources mpegpicture.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/to_upper4.c")
     list(APPEND avcodec_sources to_upper4.c)
 endif()
 
 
 # MPEGVIDEODEC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideo_dec.c")
+if(CONFIG_MPEGVIDEODEC)
     list(APPEND avcodec_sources mpegvideo_dec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegutils.c")
     list(APPEND avcodec_sources mpegutils.c)
 endif()
 
 
 # MPEGVIDEOENC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideo_enc.c")
+if(CONFIG_MPEGVIDEOENC)
     list(APPEND avcodec_sources mpegvideo_enc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg12data.c")
     list(APPEND avcodec_sources mpeg12data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/motion_est.c")
     list(APPEND avcodec_sources motion_est.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ratecontrol.c")
     list(APPEND avcodec_sources ratecontrol.c)
 endif()
 
 
 # MPEGVIDEOENCDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegvideoencdsp.c")
+if(CONFIG_MPEGVIDEOENCDSP)
     list(APPEND avcodec_sources mpegvideoencdsp.c)
 endif()
 
 
 # MSMPEG4DEC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4dec.c")
+if(CONFIG_MSMPEG4DEC)
     list(APPEND avcodec_sources msmpeg4dec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4.c")
     list(APPEND avcodec_sources msmpeg4.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4data.c")
     list(APPEND avcodec_sources msmpeg4data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4_vc1_data.c")
     list(APPEND avcodec_sources msmpeg4_vc1_data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4videodec.c")
     list(APPEND avcodec_sources mpeg4videodec.c)
 endif()
 
 
 # MSMPEG4ENC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4enc.c")
+if(CONFIG_MSMPEG4ENC)
     list(APPEND avcodec_sources msmpeg4enc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4.c")
     list(APPEND avcodec_sources msmpeg4.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4data.c")
     list(APPEND avcodec_sources msmpeg4data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/msmpeg4_vc1_data.c")
     list(APPEND avcodec_sources msmpeg4_vc1_data.c)
 endif()
 
 
 # MSS34DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mss34dsp.c")
+if(CONFIG_MSS34DSP)
     list(APPEND avcodec_sources mss34dsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/jpegquanttables.c")
     list(APPEND avcodec_sources jpegquanttables.c)
 endif()
 
 
 # PIXBLOCKDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pixblockdsp.c")
+if(CONFIG_PIXBLOCKDSP)
     list(APPEND avcodec_sources pixblockdsp.c)
 endif()
 
 
 # QPELDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/qpeldsp.c")
+if(CONFIG_QPELDSP)
     list(APPEND avcodec_sources qpeldsp.c)
 endif()
 
 
 # RANGECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rangecoder.c")
+if(CONFIG_RANGECODER)
     list(APPEND avcodec_sources rangecoder.c)
 endif()
 
 
 # RV34DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rv34dsp.c")
+if(CONFIG_RV34DSP)
     list(APPEND avcodec_sources rv34dsp.c)
 endif()
 
 
 # SINEWIN
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sinewin.c")
+if(CONFIG_SINEWIN)
     list(APPEND avcodec_sources sinewin.c)
 endif()
 
 
 # SMPTE_436M
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/smpte_436m.c")
+if(CONFIG_SMPTE_436M)
     list(APPEND avcodec_sources smpte_436m.c)
 endif()
 
 
 # STARTCODE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/startcode.c")
+if(CONFIG_STARTCODE)
     list(APPEND avcodec_sources startcode.c)
 endif()
 
 
 # TEXTUREDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/texturedsp.c")
+if(CONFIG_TEXTUREDSP)
     list(APPEND avcodec_sources texturedsp.c)
 endif()
 
 
 # TEXTUREDSPENC
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/texturedspenc.c")
+if(CONFIG_TEXTUREDSPENC)
     list(APPEND avcodec_sources texturedspenc.c)
 endif()
 
 
 # TPELDSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tpeldsp.c")
+if(CONFIG_TPELDSP)
     list(APPEND avcodec_sources tpeldsp.c)
 endif()
 
 
 # VC1DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vc1dsp.c")
+if(CONFIG_VC1DSP)
     list(APPEND avcodec_sources vc1dsp.c)
 endif()
 
 
 # VIDEODSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/videodsp.c")
+if(CONFIG_VIDEODSP)
     list(APPEND avcodec_sources videodsp.c)
 endif()
 
 
 # VP3DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp3dsp.c")
+if(CONFIG_VP3DSP)
     list(APPEND avcodec_sources vp3dsp.c)
 endif()
 
 
 # VP8DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp8dsp.c")
+if(CONFIG_VP8DSP)
     list(APPEND avcodec_sources vp8dsp.c)
 endif()
 
 
 # WMA_FREQS
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wma_freqs.c")
+if(CONFIG_WMA_FREQS)
     list(APPEND avcodec_sources wma_freqs.c)
 endif()
 
 
 # WMV2DSP
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wmv2dsp.c")
+if(CONFIG_WMV2DSP)
     list(APPEND avcodec_sources wmv2dsp.c)
 endif()
 
 
 # DIRAC_PARSE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dirac_parser.c")
+if(CONFIG_DIRAC_PARSE)
     list(APPEND avcodec_sources dirac_parser.c)
 endif()
 
 
 # DVPROFILE
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dv_profile.c")
+if(CONFIG_DVPROFILE)
     list(APPEND avcodec_sources dv_profile.c)
 endif()
 
@@ -766,34 +644,16 @@ endif()
 
 # H.264 decoder
 # H264_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264dec.c")
+if(CONFIG_H264_DECODER)
     list(APPEND avcodec_sources h264dec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_cabac.c")
     list(APPEND avcodec_sources h264_cabac.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_cavlc.c")
     list(APPEND avcodec_sources h264_cavlc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_direct.c")
     list(APPEND avcodec_sources h264_direct.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_loopfilter.c")
     list(APPEND avcodec_sources h264_loopfilter.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_mb.c")
     list(APPEND avcodec_sources h264_mb.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_picture.c")
     list(APPEND avcodec_sources h264_picture.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_refs.c")
     list(APPEND avcodec_sources h264_refs.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_sei.c")
     list(APPEND avcodec_sources h264_sei.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/h264_slice.c")
     list(APPEND avcodec_sources h264_slice.c)
 endif()
 
@@ -802,286 +662,172 @@ endif()
 
 # MPEG-4 decoder
 # MPEG4_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4videodec.c")
+if(CONFIG_MPEG4_DECODER)
     list(APPEND avcodec_sources mpeg4videodec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4video.c")
     list(APPEND avcodec_sources mpeg4video.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4videodsp.c")
     list(APPEND avcodec_sources mpeg4videodsp.c)
 endif()
 
 
 # MPEG-4 encoder
 # MPEG4_ENCODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4videoenc.c")
+if(CONFIG_MPEG4_ENCODER)
     list(APPEND avcodec_sources mpeg4videoenc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg4video.c")
     list(APPEND avcodec_sources mpeg4video.c)
 endif()
 
 
 # MPEG-1/2 decoder
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg12.c")
     list(APPEND avcodec_sources mpeg12.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg12dec.c")
     list(APPEND avcodec_sources mpeg12dec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg12data.c")
     list(APPEND avcodec_sources mpeg12data.c)
-endif()
 
 
 # MPEG-1/2 encoder
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg12enc.c")
     list(APPEND avcodec_sources mpeg12enc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpeg12data.c")
     list(APPEND avcodec_sources mpeg12data.c)
-endif()
 
 
 # VP8 decoder
 # VP8_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp8.c")
+if(CONFIG_VP8_DECODER)
     list(APPEND avcodec_sources vp8.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp8data.c")
     list(APPEND avcodec_sources vp8data.c)
 endif()
 
 
 # VP9 decoder
 # VP9_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9.c")
+if(CONFIG_VP9_DECODER)
     list(APPEND avcodec_sources vp9.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9data.c")
     list(APPEND avcodec_sources vp9data.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9dsp.c")
     list(APPEND avcodec_sources vp9dsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9dsp_10bpp.c")
     list(APPEND avcodec_sources vp9dsp_10bpp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9dsp_12bpp.c")
     list(APPEND avcodec_sources vp9dsp_12bpp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9dsp_8bpp.c")
     list(APPEND avcodec_sources vp9dsp_8bpp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9lpf.c")
     list(APPEND avcodec_sources vp9lpf.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9mvs.c")
     list(APPEND avcodec_sources vp9mvs.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9prob.c")
     list(APPEND avcodec_sources vp9prob.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vp9recon.c")
     list(APPEND avcodec_sources vp9recon.c)
 endif()
 
 
 # AAC decoder
 # AAC_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aactab.c")
+if(CONFIG_AAC_DECODER)
     list(APPEND avcodec_sources aactab.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacsbr.c")
     list(APPEND avcodec_sources aacsbr.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacps_common.c")
     list(APPEND avcodec_sources aacps_common.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacps_float.c")
     list(APPEND avcodec_sources aacps_float.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kbdwin.c")
     list(APPEND avcodec_sources kbdwin.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sbrdsp.c")
     list(APPEND avcodec_sources sbrdsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacpsdsp_float.c")
     list(APPEND avcodec_sources aacpsdsp_float.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cbrt_data.c")
     list(APPEND avcodec_sources cbrt_data.c)
 endif()
 
 
 # AAC encoder
 # AAC_ENCODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacenc.c")
+if(CONFIG_AAC_ENCODER)
     list(APPEND avcodec_sources aacenc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacenc_is.c")
     list(APPEND avcodec_sources aacenc_is.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacenc_pred.c")
     list(APPEND avcodec_sources aacenc_pred.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacenc_quantization.c")
     list(APPEND avcodec_sources aacenc_quantization.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacenc_tns.c")
     list(APPEND avcodec_sources aacenc_tns.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aacenctab.c")
     list(APPEND avcodec_sources aacenctab.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/aactab.c")
     list(APPEND avcodec_sources aactab.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kbdwin.c")
     list(APPEND avcodec_sources kbdwin.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/psymodel.c")
     list(APPEND avcodec_sources psymodel.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/iirfilter.c")
     list(APPEND avcodec_sources iirfilter.c)
 endif()
 
 
 # MP3 decoder
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodec_fixed.c")
     list(APPEND avcodec_sources mpegaudiodec_fixed.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mpegaudiodec_float.c")
     list(APPEND avcodec_sources mpegaudiodec_float.c)
-endif()
 
 
 # AC3 decoder
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3dec_float.c")
     list(APPEND avcodec_sources ac3dec_float.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3dec_fixed.c")
     list(APPEND avcodec_sources ac3dec_fixed.c)
-endif()
 
 
 # AC3 encoder
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3enc.c")
     list(APPEND avcodec_sources ac3enc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3enc_float.c")
     list(APPEND avcodec_sources ac3enc_float.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ac3enc_fixed.c")
     list(APPEND avcodec_sources ac3enc_fixed.c)
-endif()
 
 
 # FLAC decoder
 # FLAC_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/flacdec.c")
+if(CONFIG_FLAC_DECODER)
     list(APPEND avcodec_sources flacdec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/flac.c")
     list(APPEND avcodec_sources flac.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/flacdata.c")
     list(APPEND avcodec_sources flacdata.c)
 endif()
 
 
 # FLAC encoder
 # FLAC_ENCODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/flacenc.c")
+if(CONFIG_FLAC_ENCODER)
     list(APPEND avcodec_sources flacenc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/flac.c")
     list(APPEND avcodec_sources flac.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/flacdata.c")
     list(APPEND avcodec_sources flacdata.c)
 endif()
 
 
 # JPEG/MJPEG decoder
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mjpegdec.c")
     list(APPEND avcodec_sources mjpegdec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mjpeg.c")
     list(APPEND avcodec_sources mjpeg.c)
-endif()
 
 
 # JPEG/MJPEG encoder
 # MJPEG_ENCODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mjpegenc.c")
+if(CONFIG_MJPEG_ENCODER)
     list(APPEND avcodec_sources mjpegenc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mjpeg.c")
     list(APPEND avcodec_sources mjpeg.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mjpegenc_common.c")
     list(APPEND avcodec_sources mjpegenc_common.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mjpegenc_huffman.c")
     list(APPEND avcodec_sources mjpegenc_huffman.c)
 endif()
 
 
 # PNG decoder
 # PNG_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pngdec.c")
+if(CONFIG_PNG_DECODER)
     list(APPEND avcodec_sources pngdec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/png.c")
     list(APPEND avcodec_sources png.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pngdsp.c")
     list(APPEND avcodec_sources pngdsp.c)
 endif()
 
 
 # PNG encoder
 # PNG_ENCODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pngenc.c")
+if(CONFIG_PNG_ENCODER)
     list(APPEND avcodec_sources pngenc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/png.c")
     list(APPEND avcodec_sources png.c)
 endif()
 
 
 # Vorbis decoder
 # VORBIS_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vorbisdec.c")
+if(CONFIG_VORBIS_DECODER)
     list(APPEND avcodec_sources vorbisdec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vorbis.c")
     list(APPEND avcodec_sources vorbis.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vorbis_data.c")
     list(APPEND avcodec_sources vorbis_data.c)
 endif()
 
 
 # Vorbis encoder
 # VORBIS_ENCODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vorbisenc.c")
+if(CONFIG_VORBIS_ENCODER)
     list(APPEND avcodec_sources vorbisenc.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vorbis.c")
     list(APPEND avcodec_sources vorbis.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vorbis_data.c")
     list(APPEND avcodec_sources vorbis_data.c)
 endif()
 
@@ -1092,86 +838,48 @@ endif()
 
 # PCM codecs
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/pcm.c")
     list(APPEND avcodec_sources pcm.c)
-endif()
 
 
 # ADPCM codecs
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/adpcm.c")
     list(APPEND avcodec_sources adpcm.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/adpcm_data.c")
     list(APPEND avcodec_sources adpcm_data.c)
-endif()
 
 
 # DCA (DTS) decoder
 # DCA_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dcadec.c")
+if(CONFIG_DCA_DECODER)
     list(APPEND avcodec_sources dcadec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dca.c")
     list(APPEND avcodec_sources dca.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dca_core.c")
     list(APPEND avcodec_sources dca_core.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dca_exss.c")
     list(APPEND avcodec_sources dca_exss.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dca_lbr.c")
     list(APPEND avcodec_sources dca_lbr.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dca_xll.c")
     list(APPEND avcodec_sources dca_xll.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dcadata.c")
     list(APPEND avcodec_sources dcadata.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dcadsp.c")
     list(APPEND avcodec_sources dcadsp.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dcahuff.c")
     list(APPEND avcodec_sources dcahuff.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dca_sample_rate_tab.c")
     list(APPEND avcodec_sources dca_sample_rate_tab.c)
 endif()
 
 
 # WMV/WMA codecs
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wmv2dec.c")
     list(APPEND avcodec_sources wmv2dec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wmv2.c")
     list(APPEND avcodec_sources wmv2.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wmv2dsp.c")
     list(APPEND avcodec_sources wmv2dsp.c)
-endif()
 
 
 # (multi-condition block - unconditional)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wmadec.c")
     list(APPEND avcodec_sources wmadec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wma.c")
     list(APPEND avcodec_sources wma.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/wma_common.c")
     list(APPEND avcodec_sources wma_common.c)
-endif()
 
 
 # AV1 decoder
 # AV1_DECODER
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/av1dec.c")
+if(CONFIG_AV1_DECODER)
     list(APPEND avcodec_sources av1dec.c)
-endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/av1_parse.c")
     list(APPEND avcodec_sources av1_parse.c)
 endif()
 
@@ -1234,6 +942,10 @@ if(ARCH_AARCH64 AND ENABLE_ASM)
     foreach(_src_abs IN LISTS _aarch64_c_files)
         get_filename_component(_src_name "${_src_abs}" NAME)
         if("${_src_name}" MATCHES "_template\\.c$")
+            continue()
+        endif()
+        # rv40dsp_init_aarch64.c requires CONFIG_RV40_DECODER and matching NEON .S code
+        if("${_src_name}" STREQUAL "rv40dsp_init_aarch64.c" AND NOT CONFIG_RV40_DECODER)
             continue()
         endif()
         list(APPEND avcodec_sources "aarch64/${_src_name}")
@@ -1341,13 +1053,8 @@ set(avcodec_external_lib_files
     amfdec.c amfenc.c amfenc_av1.c amfenc_h264.c amfenc_hevc.c
     # AudioToolbox (macOS only)
     audiotoolboxdec.c audiotoolboxenc.c
-    aac_at_dec.c aac_at_enc.c ac3_at_dec.c adpcm_at_dec.c
-    alac_at_dec.c alac_at_enc.c alaw_at_dec.c mp1_at_dec.c
-    mp2_at_dec.c mp3_at_dec.c mp3_at_enc.c pcm_at_dec.c ulaw_at_dec.c
     # VideoToolbox (macOS only)
-    videotoolbox.c videotoolbox_vt.c videotoolboxenc.c vt_internal.c
-    h264_videotoolbox.c hevc_videotoolbox.c prores_videotoolbox.c
-    vp9_videotoolbox.c av1_videotoolbox.c
+    videotoolbox.c videotoolboxenc.c
     # MediaCodec (Android only)
     mediacodec_dec.c mediacodec_enc.c mediacodec_wrapper.c
     mediacodec_surface.c mediacodecdec.c mediacodecenc.c
@@ -1535,8 +1242,8 @@ foreach(_src_abs IN LISTS _all_avcodec_c)
         list(APPEND avcodec_glob_excluded "${_src_name}")
         continue()
     endif()
-    # Skip VideoToolbox files (macOS only)
-    if("${_src_name}" MATCHES "^videotoolbox")
+    # Skip VideoToolbox files (handled in conditional section below)
+    if("${_src_name}" MATCHES "^videotoolbox\\.c$|^videotoolboxenc\\.c$")
         list(APPEND avcodec_glob_excluded "${_src_name}")
         continue()
     endif()
@@ -1611,6 +1318,20 @@ endif()
 # lcms2 color management
 if(CONFIG_LCMS2)
     list(APPEND avcodec_sources fflcms2.c)
+endif()
+
+# VideoToolbox (macOS/iOS hardware acceleration)
+if(APPLE AND CONFIG_VIDEOTOOLBOX)
+    list(APPEND avcodec_sources
+        videotoolbox.c videotoolboxenc.c
+    )
+endif()
+
+# AudioToolbox (macOS/iOS audio codecs)
+if(APPLE AND CONFIG_AUDIOTOOLBOX)
+    list(APPEND avcodec_sources
+        audiotoolboxdec.c audiotoolboxenc.c
+    )
 endif()
 
 # ============================================================================
@@ -1932,6 +1653,21 @@ if(CONFIG_BZLIB AND BZIP2_FOUND)
 endif()
 
 # External library include/link are handled centrally in cmake/FFmpegApplyExternalLibs.cmake
+
+# Apple frameworks (macOS/iOS)
+if(APPLE)
+    if(CONFIG_AUDIOTOOLBOX)
+        target_link_libraries(avcodec PRIVATE "-framework AudioToolbox" "-framework CoreFoundation")
+    endif()
+    if(CONFIG_VIDEOTOOLBOX)
+        target_link_libraries(avcodec PRIVATE
+            "-framework VideoToolbox"
+            "-framework CoreVideo"
+            "-framework CoreMedia"
+            "-framework CoreFoundation"
+        )
+    endif()
+endif()
 
 # Compiler definitions
 target_compile_definitions(avcodec PRIVATE

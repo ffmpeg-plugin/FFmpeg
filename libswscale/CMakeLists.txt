@@ -102,6 +102,22 @@ if(ARCH_ARM AND ENABLE_ASM)
 endif()
 
 # ============================================================================
+# Vulkan support
+# ============================================================================
+if(CONFIG_VULKAN)
+    list(APPEND swscale_sources
+        vulkan/ops.c
+        vulkan/vulkan.c
+    )
+    if(CONFIG_LIBSHADERC)
+        list(APPEND swscale_sources vulkan/vulkan_shaderc.c)
+    endif()
+    if(CONFIG_LIBGLSLANG)
+        list(APPEND swscale_sources vulkan/vulkan_glslang.c)
+    endif()
+endif()
+
+# ============================================================================
 # Only add sources that actually exist
 # ============================================================================
 set(swscale_existing "")
