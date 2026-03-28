@@ -807,7 +807,8 @@ endif()
 
 include(CheckStructHasMember)
 
-# Check for struct stat.st_mtim.tv_nsec (POSIX.1-2008)
+# Check for struct stat.st_mtim.tv_nsec (POSIX.1-2008, Linux/BSD)
+# or st_mtimespec.tv_nsec (macOS/iOS)
 set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
 if(NOT APPLE)
     set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS} -D_BSD_SOURCE)
@@ -816,6 +817,16 @@ check_struct_has_member("struct stat" st_mtim.tv_nsec sys/stat.h HAVE_STRUCT_STA
 set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS_SAVE})
 if(NOT HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC)
     set(HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC 0)
+endif()
+
+# macOS uses st_mtimespec instead of st_mtim
+if(APPLE)
+    check_struct_has_member("struct stat" st_mtimespec.tv_nsec sys/stat.h HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+    if(NOT HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC)
+        set(HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC 0)
+    endif()
+else()
+    set(HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC 0)
 endif()
 
 # Check for struct rusage.ru_maxrss (getrusage RSS field)
