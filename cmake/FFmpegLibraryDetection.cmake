@@ -858,14 +858,32 @@ endmacro()
 #
 # FFmpegDetectVulkan:
 #   Detect Vulkan graphics API
+#   Only enable if Vulkan headers are new enough to support required extensions
 #
 macro(FFmpegDetectVulkan)
     if(ENABLE_VULKAN)
         find_package(Vulkan QUIET)
         if(Vulkan_FOUND)
-            set(CONFIG_VULKAN 1)
-            set(VULKAN_INCLUDE_DIRS ${Vulkan_INCLUDE_DIRS})
-            set(VULKAN_LIBRARIES ${Vulkan_LIBRARIES})
+            # Check if Vulkan headers are new enough
+            # FFmpeg requires VK_KHR_SHADER_SUBGROUP_ROTATE_EXTENSION_NAME and
+            # VK_KHR_VIDEO_DECODE_AV1_EXTENSION_NAME which are in v1.3.268+
+            check_c_source_compiles("
+                #include <vulkan/vulkan.h>
+                #ifndef VK_KHR_SHADER_SUBGROUP_ROTATE_EXTENSION_NAME
+                #error \"VK_KHR_SHADER_SUBGROUP_ROTATE not defined\"
+                #endif
+                int main() { return 0; }
+            " VULKAN_HEADERS_NEW_ENOUGH)
+            
+            if(VULKAN_HEADERS_NEW_ENOUGH)
+                set(CONFIG_VULKAN 1)
+                set(VULKAN_INCLUDE_DIRS ${Vulkan_INCLUDE_DIRS})
+                set(VULKAN_LIBRARIES ${Vulkan_LIBRARIES})
+                message(STATUS "Found Vulkan: ${Vulkan_VERSION} (headers new enough)")
+            else()
+                set(CONFIG_VULKAN 0)
+                message(STATUS "Found Vulkan: ${Vulkan_VERSION} but headers too old, disabling")
+            endif()
         else()
             set(CONFIG_VULKAN 0)
         endif()

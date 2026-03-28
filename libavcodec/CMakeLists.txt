@@ -1961,6 +1961,14 @@ endif()
 if(CONFIG_BZLIB AND BZIP2_FOUND)
     target_link_libraries(avcodec PRIVATE BZip2::BZip2)
 endif()
+if(CONFIG_LCMS2 AND lcms2_found)
+    if(PC_LCMS2_INCLUDE_DIRS)
+        target_include_directories(avcodec PRIVATE ${PC_LCMS2_INCLUDE_DIRS})
+    endif()
+    if(PC_LCMS2_LDFLAGS)
+        target_link_libraries(avcodec PRIVATE ${PC_LCMS2_LDFLAGS})
+    endif()
+endif()
 
 # Compiler definitions
 target_compile_definitions(avcodec PRIVATE

@@ -264,6 +264,14 @@ if(Vulkan_FOUND)
     target_include_directories(avutil PRIVATE ${Vulkan_INCLUDE_DIRS})
 endif()
 
+# Link OpenCL if available
+if(CONFIG_OPENCL AND OPENCL_LIBRARIES)
+    target_link_libraries(avutil PRIVATE ${OPENCL_LIBRARIES})
+    if(OPENCL_INCLUDE_DIRS)
+        target_include_directories(avutil PRIVATE ${OPENCL_INCLUDE_DIRS})
+    endif()
+endif()
+
 # Link VAAPI if available
 # ffmpeg_require_pkg_config(vaapi libva ...) sets VAAPI_* variables
 if(CONFIG_VAAPI AND VAAPI_LIBRARIES)

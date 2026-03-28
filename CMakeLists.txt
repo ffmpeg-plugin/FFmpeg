@@ -202,11 +202,16 @@ else()
         # On macOS, socklen_t is always present (required by POSIX)
         set(HAVE_SOCKLEN_T 1)
     else()
+        # Need to include <sys/socket.h> for socklen_t detection
+        # Some platforms require feature test macros
+        set(CMAKE_REQUIRED_DEFINITIONS_SAVE ${CMAKE_REQUIRED_DEFINITIONS})
+        set(CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS} -D_GNU_SOURCE")
         check_c_source_compiles("
             #include <sys/types.h>
             #include <sys/socket.h>
             int main(void) { socklen_t x = 0; (void)x; return 0; }
         " HAVE_SOCKLEN_T)
+        set(CMAKE_REQUIRED_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS_SAVE})
         if(NOT HAVE_SOCKLEN_T)
             set(HAVE_SOCKLEN_T 0)
         endif()
