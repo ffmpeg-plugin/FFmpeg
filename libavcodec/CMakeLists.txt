@@ -6007,7 +6007,7 @@ if(ARCH_AARCH64 AND ENABLE_ASM)
     if(CONFIG_VP9_DECODER)
         list(APPEND avcodec_sources aarch64/vp9dsp_init_10bpp_aarch64.c)
         list(APPEND avcodec_sources aarch64/vp9dsp_init_12bpp_aarch64.c)
-        list(APPEND avcodec_sources aarch64/vp9mc_aarch64.c)
+        list(APPEND avcodec_sources aarch64/vp9mc_aarch64.S)
         list(APPEND avcodec_sources aarch64/vp9dsp_init_aarch64.c)
     endif()
 
@@ -6159,6 +6159,12 @@ if(ARCH_AARCH64 AND ENABLE_ASM)
 
 endif()
 
+# ============================================================================
+# Thread support (from OBJS-$(HAVE_THREADS) in Makefile)
+# ============================================================================
+if(HAVE_THREADS)
+    list(APPEND avcodec_sources pthread.c pthread_slice.c pthread_frame.c)
+endif()
 # ============================================================================
 # Remove duplicates
 # ============================================================================

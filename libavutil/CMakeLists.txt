@@ -144,9 +144,13 @@ if(CONFIG_LIBDRM)
     list(APPEND avutil_sources hwcontext_drm.c)
 endif()
 
-# half2float.c needed for swscale and EXR/PHM codecs
-if(ENABLE_SWSCALE OR CONFIG_EXR_DECODER OR CONFIG_EXR_ENCODER OR CONFIG_PHM_DECODER OR CONFIG_PHM_ENCODER)
+# half2float.c / float2half.c needed for swscale and EXR/PHM codecs
+# (from STLIBOBJS-$(CONFIG_*) in Makefile)
+if(ENABLE_SWSCALE OR CONFIG_EXR_DECODER OR CONFIG_PHM_DECODER)
     list(APPEND avutil_sources half2float.c)
+endif()
+if(CONFIG_EXR_DECODER OR CONFIG_EXR_ENCODER OR CONFIG_PHM_ENCODER)
+    list(APPEND avutil_sources float2half.c)
 endif()
 
 # AArch64 specific sources with assembly

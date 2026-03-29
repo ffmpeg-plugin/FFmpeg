@@ -45,6 +45,16 @@ if(CONFIG_DNN)
     list(APPEND avfilter_sources dnn/queue.c)
     list(APPEND avfilter_sources dnn/safe_queue.c)
     list(APPEND avfilter_sources dnn/dnn_backend_common.c)
+    # DNN backends (from DNN-OBJS-$(CONFIG_*) in dnn/Makefile)
+    if(CONFIG_LIBTENSORFLOW)
+        list(APPEND avfilter_sources dnn/dnn_backend_tf.c)
+    endif()
+    if(CONFIG_LIBOPENVINO)
+        list(APPEND avfilter_sources dnn/dnn_backend_openvino.c)
+    endif()
+    if(CONFIG_LIBTORCH)
+        list(APPEND avfilter_sources dnn/dnn_backend_torch.c)
+    endif()
 endif()
 
 if(CONFIG_LIBGLSLANG)
@@ -2933,6 +2943,13 @@ if(ARCH_AARCH64 AND ENABLE_ASM)
 endif()
 
 # ============================================================================
+# Thread support (from OBJS-$(HAVE_THREADS) in Makefile)
+# ============================================================================
+if(HAVE_THREADS)
+    list(APPEND avfilter_sources pthread.c)
+endif()
+
+# ============================================================================
 # Remove duplicates
 # ============================================================================
 list(REMOVE_DUPLICATES avfilter_sources)
@@ -3012,6 +3029,12 @@ set(avfilter_buffer_symbols
 )
 
 list(REMOVE_DUPLICATES avfilter_filter_symbols)
+
+# Remove filter symbols for disabled filters that share source files with enabled filters
+# (e.g., ff_vf_libvmaf_cuda is defined in vf_libvmaf.c which is compiled for CONFIG_LIBVMAF_FILTER)
+if(NOT CONFIG_LIBVMAF_CUDA_FILTER)
+    list(REMOVE_ITEM avfilter_filter_symbols ff_vf_libvmaf_cuda)
+endif()
 
 # Generate filter_list.c
 set(FILTER_LIST_CONTENT "static const FFFilter * const filter_list[] = {\n")

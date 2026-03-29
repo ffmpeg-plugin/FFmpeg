@@ -296,6 +296,12 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/checkasm/checkasm.c)
     # Collect all checkasm C source files
     file(GLOB CHECKASM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/checkasm/*.c")
 
+    # Remove test files for disabled filters/components that pull in
+    # extra object dependencies not present in the library
+    if(NOT CONFIG_FSPP_FILTER)
+        list(FILTER CHECKASM_SOURCES EXCLUDE REGEX "checkasm/vf_fspp\\.c$")
+    endif()
+
     # Add architecture-specific assembly file
     if(ARCH_X86 AND HAVE_X86ASM)
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/checkasm/x86/checkasm.asm")

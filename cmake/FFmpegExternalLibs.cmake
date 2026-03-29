@@ -1134,6 +1134,8 @@ if(ENABLE_LIBOPENVINO)
     ffmpeg_check_pkg_config(libopenvino openvino "openvino/c/openvino.h" "ov_core_create")
     if(CONFIG_LIBOPENVINO)
         set(openvino2 1)
+        set(HAVE_OPENVINO2 1 PARENT_SCOPE)
+        set(HAVE_OPENVINO2 1)
     else()
         # Try old API
         ffmpeg_check_pkg_config(libopenvino openvino "c_api/ie_c_api.h" "ie_c_api_version")
