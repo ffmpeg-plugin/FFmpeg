@@ -6447,7 +6447,7 @@ set(avcodec_external_lib_files
 set(avcodec_auto_excluded ${avcodec_template_files} ${avcodec_external_lib_files} ${avcodec_tablegen_files}
     allcodecs.c)
 
-# Step 1: Collect all symbols declared in allcodecs.c
+# Step 1: Collect all symbols declared in allcodecs.c and bitstream_filters.c
 set(_all_codec_syms "")
 set(_all_bsf_syms "")
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/allcodecs.c" _allcodecs_lines
@@ -6456,6 +6456,15 @@ foreach(_line IN LISTS _allcodecs_lines)
     if(_line MATCHES "extern const FFCodec (ff_[a-zA-Z0-9_]+);")
         list(APPEND _all_codec_syms "${CMAKE_MATCH_1}")
     elseif(_line MATCHES "extern const FFBitStreamFilter (ff_[a-zA-Z0-9_]+);")
+        list(APPEND _all_bsf_syms "${CMAKE_MATCH_1}")
+    endif()
+endforeach()
+
+# BSF symbols are declared in bitstream_filters.c, not allcodecs.c
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/bitstream_filters.c" _bsf_lines
+    REGEX "^extern const FFBitStreamFilter ff_[a-zA-Z0-9_]+;")
+foreach(_line IN LISTS _bsf_lines)
+    if(_line MATCHES "extern const FFBitStreamFilter (ff_[a-zA-Z0-9_]+);")
         list(APPEND _all_bsf_syms "${CMAKE_MATCH_1}")
     endif()
 endforeach()
@@ -6518,8 +6527,19 @@ foreach(_src IN LISTS avcodec_sources)
     
     if(_gcc_result EQUAL 0)
         # Scan preprocessed output for FFCodec/FFBitStreamFilter definitions
+        # Note: We must exclude 'extern' declarations (e.g. from bitstream_filters.c)
+        # Only match actual definitions like: const FFBitStreamFilter ff_xxx_bsf = {
         string(REGEX MATCHALL "const FFCodec ff_[a-zA-Z0-9_]+" _codec_matches "${_expanded}")
         string(REGEX MATCHALL "const FFBitStreamFilter ff_[a-zA-Z0-9_]+" _bsf_matches "${_expanded}")
+        
+        # Also find extern declarations to exclude them
+        string(REGEX MATCHALL "extern const FFBitStreamFilter ff_[a-zA-Z0-9_]+" _bsf_extern_matches "${_expanded}")
+        set(_bsf_extern_syms "")
+        foreach(_match IN LISTS _bsf_extern_matches)
+            if(_match MATCHES "extern const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
+                list(APPEND _bsf_extern_syms "${CMAKE_MATCH_1}")
+            endif()
+        endforeach()
         
         foreach(_match IN LISTS _codec_matches)
             if(_match MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
@@ -6529,9 +6549,35 @@ foreach(_src IN LISTS avcodec_sources)
         
         foreach(_match IN LISTS _bsf_matches)
             if(_match MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
-                list(APPEND _found_bsf_syms "${CMAKE_MATCH_1}")
+                set(_bsf_sym "${CMAKE_MATCH_1}")
+                # Count occurrences: if it appears more times in _bsf_matches than _bsf_extern_matches,
+                # it has an actual definition (not just extern). But simpler: check if this source file
+                # is the BSF source file itself (contains the definition, not just extern).
+                # A source file that only has extern won't have the '= {' pattern.
+                # For simplicity, track and later subtract extern-only symbols.
+                list(APPEND _found_bsf_syms "${_bsf_sym}")
             endif()
         endforeach()
+        
+        # Remove BSF symbols that were only found as extern declarations in this file
+        # If a symbol appears in both _bsf_matches and _bsf_extern_matches with same count,
+        # it's only an extern declaration
+        if(_bsf_extern_syms)
+            # Check if this file has actual BSF definitions (with '= {' or '=')
+            string(REGEX MATCHALL "const FFBitStreamFilter ff_[a-zA-Z0-9_]+ =" _bsf_def_matches "${_expanded}")
+            set(_bsf_def_syms "")
+            foreach(_match IN LISTS _bsf_def_matches)
+                if(_match MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
+                    list(APPEND _bsf_def_syms "${CMAKE_MATCH_1}")
+                endif()
+            endforeach()
+            # For extern-only symbols (in extern list but not in def list), remove from found
+            foreach(_ext_sym IN LISTS _bsf_extern_syms)
+                if(NOT "${_ext_sym}" IN_LIST _bsf_def_syms)
+                    list(REMOVE_ITEM _found_bsf_syms "${_ext_sym}")
+                endif()
+            endforeach()
+        endif()
     endif()
 endforeach()
 
@@ -6552,6 +6598,7 @@ set(_codec_symbols ${_verified_codec_syms})
 set(_verified_bsf_syms "")
 foreach(_sym IN LISTS _bsf_symbols)
     if("${_sym}" IN_LIST _found_bsf_syms)
+        list(APPEND _verified_bsf_syms "${_sym}")
     endif()
 endforeach()
 set(_bsf_symbols ${_verified_bsf_syms})
