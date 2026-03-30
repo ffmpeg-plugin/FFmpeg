@@ -6186,435 +6186,66 @@ foreach(src IN LISTS avcodec_sources)
 endforeach()
 set(avcodec_sources ${avcodec_sources_filtered})
 
+
 # ============================================================================
-# Generate custom codec_list.c and bsf_list.c based on actually compiled files
-# Strategy: scan allcodecs.c for all extern declarations, then filter by
-# checking which symbols are actually defined in compiled source files.
-# This handles codecs defined via macros (like PCM codecs in pcm.c).
+# Generate codec_list.c, bsf_list.c, and allcodecs_generated.c
+# Strategy: scan allcodecs.c / bitstream_filters.c for extern declarations,
+# then filter by CONFIG_* cmake variables. No preprocessing needed.
 # ============================================================================
 
-# Tablegen files (generate lookup tables, not compiled into library)
-set(avcodec_tablegen_files
-    aacps_fixed_tablegen.c
-    aacps_tablegen.c
-    aacps_tablegen_template.c
-    cbrt_fixed_tablegen.c
-    cbrt_tablegen.c
-    cbrt_tablegen_template.c
-    dv_tablegen.c
-    motionpixels_tablegen.c
-    mpegaudio_tablegen.c
-    mpegaudiodec_common_tablegen.c
-    pcm_tablegen.c
-    qdm2_tablegen.c
-    sinewin_fixed_tablegen.c
-    sinewin_tablegen.c
-)
-
-# Files that are #included as templates by other .c files - do NOT compile directly
-set(avcodec_template_files
-    aacps.c
-    aacps_tablegen_template.c
-    aacpsdata.c
-    aacpsdsp_template.c
-    aacsbr_template.c
-    ac3dec.c
-    ac3enc_template.c
-    aom_film_grain_template.c
-    bit_depth_template.c
-    cbrt_tablegen_template.c
-    cbs_apv_syntax_template.c
-    cbs_av1_syntax_template.c
-    cbs_h264_syntax_template.c
-    cbs_h265_syntax_template.c
-    cbs_h266_syntax_template.c
-    cbs_jpeg_syntax_template.c
-    cbs_lcevc_syntax_template.c
-    cbs_mpeg2_syntax_template.c
-    cbs_sei_syntax_template.c
-    cbs_vp8_syntax_template.c
-    cbs_vp9_syntax_template.c
-    dct32_template.c
-    dirac_dwt_template.c
-    ffv1_template.c
-    ffv1dec_template.c
-    ffv1enc_template.c
-    flacdsp_lpc_template.c
-    flacdsp_template.c
-    g728_template.c
-    gsmdec_template.c
-    h264_mb_template.c
-    h264_mc_template.c
-    h264addpx_template.c
-    h264chroma_template.c
-    h264dsp_template.c
-    h264idct_template.c
-    h264pred_template.c
-    h264qpel_template.c
-    hpel_template.c
-    jfdctint_template.c
-    motion_est_template.c
-    mpegaudiodec_template.c
-    mpegaudiodsp_template.c
-    pel_template.c
-    qpel_template.c
-    sbrdsp_template.c
-    simple_idct_template.c
-    texturedsp_template.c
-    v210_template.c
-    videodsp_template.c
-    vp9_mc_template.c
-    vp9dsp_template.c
-)
-
-# Files requiring external libraries not available by default
-set(avcodec_external_lib_files
-    amfdec.c
-    amfenc.c
-    amfenc_av1.c
-    amfenc_h264.c
-    amfenc_hevc.c
-    audiotoolboxdec.c
-    audiotoolboxenc.c
-    cuviddec.c
-    d3d11va.c
-    d3d12va_av1.c
-    d3d12va_decode.c
-    d3d12va_encode.c
-    d3d12va_encode_av1.c
-    d3d12va_encode_h264.c
-    d3d12va_encode_hevc.c
-    d3d12va_h264.c
-    d3d12va_hevc.c
-    d3d12va_mpeg2.c
-    d3d12va_vc1.c
-    d3d12va_vp9.c
-    dxva2.c
-    dxva2_av1.c
-    dxva2_h264.c
-    dxva2_hevc.c
-    dxva2_mpeg2.c
-    dxva2_vc1.c
-    dxva2_vp9.c
-    ffjni.c
-    fflcms2.c
-    ffv1_vulkan.c
-    ffv1enc_vulkan.c
-    lcevcdec.c
-    libaom.c
-    libaomdec.c
-    libaomenc.c
-    libcelt_dec.c
-    libcodec2.c
-    libdav1d.c
-    libfdk-aacdec.c
-    libfdk-aacenc.c
-    libgsmdec.c
-    libgsmenc.c
-    libjxl.c
-    libjxldec.c
-    libjxlenc.c
-    libkvazaar.c
-    libmp3lame.c
-    libopencore-amr.c
-    libopenh264.c
-    libopenh264dec.c
-    libopenh264enc.c
-    libopenjpegenc.c
-    libopus.c
-    libopusdec.c
-    libopusenc.c
-    librav1e.c
-    libshine.c
-    libspeexdec.c
-    libspeexenc.c
-    libsvtav1.c
-    libtheoraenc.c
-    libtwolame.c
-    libuavs3d.c
-    libvorbisdec.c
-    libvorbisenc.c
-    libvpxdec.c
-    libvpxenc.c
-    libvvenc.c
-    libwebpenc.c
-    libwebpenc_animencoder.c
-    libwebpenc_common.c
-    libx264.c
-    libx265.c
-    libxavs.c
-    libxavs2.c
-    libxevd.c
-    libxeve.c
-    mediacodec.c
-    mediacodec_surface.c
-    mediacodec_sw_buffer.c
-    mediacodec_wrapper.c
-    mediacodecdec.c
-    mediacodecdec_common.c
-    mediacodecenc.c
-    mf_utils.c
-    mfenc.c
-    mmaldec.c
-    nvdec.c
-    nvdec_av1.c
-    nvdec_h264.c
-    nvdec_hevc.c
-    nvdec_mjpeg.c
-    nvdec_mpeg12.c
-    nvdec_mpeg4.c
-    nvdec_vc1.c
-    nvdec_vp8.c
-    nvdec_vp9.c
-    nvenc.c
-    nvenc_av1.c
-    nvenc_h264.c
-    nvenc_hevc.c
-    ohcodec.c
-    ohdec.c
-    ohenc.c
-    omx.c
-    proresenc_kostya_vulkan.c
-    qsv.c
-    qsv_api.c
-    qsvdec.c
-    qsvenc.c
-    qsvenc_av1.c
-    qsvenc_h264.c
-    qsvenc_hevc.c
-    qsvenc_jpeg.c
-    qsvenc_mpeg2.c
-    qsvenc_vp9.c
-    rkmppdec.c
-    rkmppenc.c
-    v4l2_buffers.c
-    v4l2_context.c
-    v4l2_fmt.c
-    v4l2_m2m.c
-    v4l2_m2m_dec.c
-    v4l2_m2m_enc.c
-    vaapi_av1.c
-    vaapi_decode.c
-    vaapi_encode.c
-    vaapi_encode_av1.c
-    vaapi_encode_h264.c
-    vaapi_encode_h265.c
-    vaapi_encode_mjpeg.c
-    vaapi_encode_mpeg2.c
-    vaapi_encode_vp8.c
-    vaapi_encode_vp9.c
-    vaapi_h264.c
-    vaapi_hevc.c
-    vaapi_mjpeg.c
-    vaapi_mpeg2.c
-    vaapi_mpeg4.c
-    vaapi_vc1.c
-    vaapi_vp8.c
-    vaapi_vp9.c
-    vaapi_vvc.c
-    vdpau.c
-    vdpau_av1.c
-    vdpau_h264.c
-    vdpau_hevc.c
-    vdpau_mpeg12.c
-    vdpau_mpeg4.c
-    vdpau_vc1.c
-    vdpau_vp9.c
-    videotoolbox.c
-    videotoolbox_av1.c
-    videotoolbox_vp9.c
-    videotoolboxenc.c
-    vulkan.c
-    vulkan_av1.c
-    vulkan_decode.c
-    vulkan_dpx.c
-    vulkan_encode.c
-    vulkan_encode_av1.c
-    vulkan_encode_h264.c
-    vulkan_encode_h265.c
-    vulkan_ffv1.c
-    vulkan_h264.c
-    vulkan_hevc.c
-    vulkan_prores.c
-    vulkan_prores_raw.c
-    vulkan_video.c
-    vulkan_vp9.c
-)
-
-# Combine all excluded files
-# allcodecs.c is excluded because it references ALL codecs (including hardware-accelerated ones
-# that are not compiled). It is replaced by the generated allcodecs_generated.c below.
-set(avcodec_auto_excluded ${avcodec_template_files} ${avcodec_external_lib_files} ${avcodec_tablegen_files}
-    allcodecs.c)
-
-# Step 1: Collect all symbols declared in allcodecs.c and bitstream_filters.c
-set(_all_codec_syms "")
-set(_all_bsf_syms "")
+# Collect codec symbols from allcodecs.c, filter by CONFIG_* variables
+set(_codec_symbols "")
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/allcodecs.c" _allcodecs_lines
-    REGEX "^extern const (FFCodec|FFBitStreamFilter) ff_[a-zA-Z0-9_]+;")
+    REGEX "^extern const FFCodec ff_[a-zA-Z0-9_]+;")
 foreach(_line IN LISTS _allcodecs_lines)
-    if(_line MATCHES "extern const FFCodec (ff_[a-zA-Z0-9_]+);")
-        list(APPEND _all_codec_syms "${CMAKE_MATCH_1}")
-    elseif(_line MATCHES "extern const FFBitStreamFilter (ff_[a-zA-Z0-9_]+);")
-        list(APPEND _all_bsf_syms "${CMAKE_MATCH_1}")
+    if(_line MATCHES "extern const FFCodec ff_([a-zA-Z0-9_]+)_(encoder|decoder);")
+        set(_name "${CMAKE_MATCH_1}")
+        set(_type "${CMAKE_MATCH_2}")
+        string(TOUPPER "${_name}_${_type}" _cfg)
+        if(CONFIG_${_cfg})
+            list(APPEND _codec_symbols "ff_${_name}_${_type}")
+        endif()
     endif()
 endforeach()
+list(REMOVE_DUPLICATES _codec_symbols)
 
-# BSF symbols are declared in bitstream_filters.c, not allcodecs.c
+# Collect BSF symbols from bitstream_filters.c, filter by CONFIG_* variables
+set(_bsf_symbols "")
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/bitstream_filters.c" _bsf_lines
     REGEX "^extern const FFBitStreamFilter ff_[a-zA-Z0-9_]+;")
 foreach(_line IN LISTS _bsf_lines)
-    if(_line MATCHES "extern const FFBitStreamFilter (ff_[a-zA-Z0-9_]+);")
-        list(APPEND _all_bsf_syms "${CMAKE_MATCH_1}")
-    endif()
-endforeach()
-
-# Step 2: Collect symbols from excluded files (these should NOT be in the list)
-set(_excluded_codec_syms "")
-set(_excluded_bsf_syms "")
-foreach(_excl_name IN LISTS avcodec_auto_excluded)
-    set(_excl_abs "${CMAKE_CURRENT_SOURCE_DIR}/${_excl_name}")
-    if(NOT EXISTS "${_excl_abs}")
-        continue()
-    endif()
-    # Scan for direct definitions
-    file(STRINGS "${_excl_abs}" _excl_lines
-        REGEX "^(const FFCodec|const FFBitStreamFilter) ff_[a-zA-Z0-9_]+ =")
-    foreach(_line IN LISTS _excl_lines)
-        if(_line MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
-            list(APPEND _excluded_codec_syms "${CMAKE_MATCH_1}")
-        elseif(_line MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
-            list(APPEND _excluded_bsf_syms "${CMAKE_MATCH_1}")
+    if(_line MATCHES "extern const FFBitStreamFilter ff_([a-zA-Z0-9_]+)_bsf;")
+        set(_name "${CMAKE_MATCH_1}")
+        string(TOUPPER "${_name}_BSF" _cfg)
+        if(CONFIG_${_cfg})
+            list(APPEND _bsf_symbols "ff_${_name}_bsf")
         endif()
-    endforeach()
+    endif()
 endforeach()
-
-# Step 3: Filter - keep only symbols NOT in excluded files
-set(_codec_symbols ${_all_codec_syms})
-set(_bsf_symbols ${_all_bsf_syms})
-if(_excluded_codec_syms)
-    list(REMOVE_ITEM _codec_symbols ${_excluded_codec_syms})
-endif()
-if(_excluded_bsf_syms)
-    list(REMOVE_ITEM _bsf_symbols ${_excluded_bsf_syms})
-endif()
-
-list(REMOVE_DUPLICATES _codec_symbols)
 list(REMOVE_DUPLICATES _bsf_symbols)
 
-# Step 4: Verify symbols actually exist in compiled sources
-set(_found_codec_syms "")
-set(_found_bsf_syms "")
-
-# Preprocess all avcodec_sources files and collect defined symbols
-foreach(_src IN LISTS avcodec_sources)
-    set(_src_abs "${CMAKE_CURRENT_SOURCE_DIR}/${_src}")
-    if(NOT EXISTS "${_src_abs}")
-        continue()
-    endif()
-    
-    # Use gcc -E to preprocess and see which symbols are actually defined
-    execute_process(
-        COMMAND ${CMAKE_C_COMPILER} -E -I${CMAKE_SOURCE_DIR} -I${CMAKE_BINARY_DIR}
-                -I${CMAKE_CURRENT_SOURCE_DIR}
-                -DHAVE_AV_CONFIG_H -include ${CMAKE_BINARY_DIR}/config.h
-                "${_src_abs}"
-        OUTPUT_VARIABLE _expanded
-        ERROR_QUIET
-        RESULT_VARIABLE _gcc_result
-        TIMEOUT 30
-    )
-    
-    if(_gcc_result EQUAL 0)
-        # Scan preprocessed output for FFCodec/FFBitStreamFilter definitions
-        # Note: We must exclude 'extern' declarations (e.g. from bitstream_filters.c)
-        # Only match actual definitions like: const FFBitStreamFilter ff_xxx_bsf = {
-        string(REGEX MATCHALL "const FFCodec ff_[a-zA-Z0-9_]+" _codec_matches "${_expanded}")
-        string(REGEX MATCHALL "const FFBitStreamFilter ff_[a-zA-Z0-9_]+" _bsf_matches "${_expanded}")
-        
-        # Also find extern declarations to exclude them
-        string(REGEX MATCHALL "extern const FFBitStreamFilter ff_[a-zA-Z0-9_]+" _bsf_extern_matches "${_expanded}")
-        set(_bsf_extern_syms "")
-        foreach(_match IN LISTS _bsf_extern_matches)
-            if(_match MATCHES "extern const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
-                list(APPEND _bsf_extern_syms "${CMAKE_MATCH_1}")
-            endif()
-        endforeach()
-        
-        foreach(_match IN LISTS _codec_matches)
-            if(_match MATCHES "const FFCodec (ff_[a-zA-Z0-9_]+)")
-                list(APPEND _found_codec_syms "${CMAKE_MATCH_1}")
-            endif()
-        endforeach()
-        
-        foreach(_match IN LISTS _bsf_matches)
-            if(_match MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
-                set(_bsf_sym "${CMAKE_MATCH_1}")
-                # Count occurrences: if it appears more times in _bsf_matches than _bsf_extern_matches,
-                # it has an actual definition (not just extern). But simpler: check if this source file
-                # is the BSF source file itself (contains the definition, not just extern).
-                # A source file that only has extern won't have the '= {' pattern.
-                # For simplicity, track and later subtract extern-only symbols.
-                list(APPEND _found_bsf_syms "${_bsf_sym}")
-            endif()
-        endforeach()
-        
-        # Remove BSF symbols that were only found as extern declarations in this file
-        # If a symbol appears in both _bsf_matches and _bsf_extern_matches with same count,
-        # it's only an extern declaration
-        if(_bsf_extern_syms)
-            # Check if this file has actual BSF definitions (with '= {' or '=')
-            string(REGEX MATCHALL "const FFBitStreamFilter ff_[a-zA-Z0-9_]+ =" _bsf_def_matches "${_expanded}")
-            set(_bsf_def_syms "")
-            foreach(_match IN LISTS _bsf_def_matches)
-                if(_match MATCHES "const FFBitStreamFilter (ff_[a-zA-Z0-9_]+)")
-                    list(APPEND _bsf_def_syms "${CMAKE_MATCH_1}")
-                endif()
-            endforeach()
-            # For extern-only symbols (in extern list but not in def list), remove from found
-            foreach(_ext_sym IN LISTS _bsf_extern_syms)
-                if(NOT "${_ext_sym}" IN_LIST _bsf_def_syms)
-                    list(REMOVE_ITEM _found_bsf_syms "${_ext_sym}")
-                endif()
-            endforeach()
-        endif()
-    endif()
-endforeach()
-
-# Remove duplicates while preserving order
-list(REMOVE_DUPLICATES _found_codec_syms)
-list(REMOVE_DUPLICATES _found_bsf_syms)
-
-# Final filter: only keep symbols that were found in preprocessed output
-set(_verified_codec_syms "")
+# Generate codec_list.c
+set(_codec_list_content "static const FFCodec * const codec_list[] = {
+")
 foreach(_sym IN LISTS _codec_symbols)
-    if("${_sym}" IN_LIST _found_codec_syms)
-        list(APPEND _verified_codec_syms "${_sym}")
-    endif()
+    string(APPEND _codec_list_content "    &${_sym},
+")
 endforeach()
-set(_codec_symbols ${_verified_codec_syms})
-
-# For BSFs, do the same
-set(_verified_bsf_syms "")
-foreach(_sym IN LISTS _bsf_symbols)
-    if("${_sym}" IN_LIST _found_bsf_syms)
-        list(APPEND _verified_bsf_syms "${_sym}")
-    endif()
-endforeach()
-set(_bsf_symbols ${_verified_bsf_syms})
-set(_codec_list_content "static const FFCodec * const codec_list[] = {\n")
-foreach(_sym IN LISTS _codec_symbols)
-    string(APPEND _codec_list_content "    &${_sym},\n")
-endforeach()
-string(APPEND _codec_list_content "    NULL\n};\n")
+string(APPEND _codec_list_content "    NULL
+};
+")
 file(WRITE "${CMAKE_BINARY_DIR}/libavcodec/codec_list.c" "${_codec_list_content}")
 
 # Generate bsf_list.c
-set(_bsf_list_content "static const FFBitStreamFilter * const bitstream_filters[] = {\n")
+set(_bsf_list_content "static const FFBitStreamFilter * const bitstream_filters[] = {
+")
 foreach(_sym IN LISTS _bsf_symbols)
-    string(APPEND _bsf_list_content "    &${_sym},\n")
+    string(APPEND _bsf_list_content "    &${_sym},
+")
 endforeach()
-string(APPEND _bsf_list_content "    NULL\n};\n")
+string(APPEND _bsf_list_content "    NULL
+};
+")
 file(WRITE "${CMAKE_BINARY_DIR}/libavcodec/bsf_list.c" "${_bsf_list_content}")
 
 # Generate allcodecs_generated.c to replace allcodecs.c
