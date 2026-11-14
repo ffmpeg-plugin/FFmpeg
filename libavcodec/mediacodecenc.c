@@ -149,6 +149,28 @@ static void mediacodec_output_format(AVCodecContext *avctx)
     ff_AMediaFormat_delete(out_format);
 }
 
+static void mediacodec_request_sync_frame(AVCodecContext *avctx)
+{
+    MediaCodecEncContext *s = avctx->priv_data;
+    FFAMediaFormat *params;
+    int ret;
+
+    if (!s->use_ndk_codec)
+        return;
+
+    params = ff_AMediaFormat_new(s->use_ndk_codec);
+    if (!params)
+        return;
+
+    ff_AMediaFormat_setInt32(params, "request-sync", 0);
+    ret = ff_AMediaCodec_setParameters(s->codec, params);
+    if (ret < 0)
+        av_log(avctx, AV_LOG_DEBUG, "Failed to request sync frame, %s\n",
+               av_err2str(ret));
+
+    ff_AMediaFormat_delete(params);
+}
+
 static int extract_extradata_support(AVCodecContext *avctx)
 {
     const AVBitStreamFilter *bsf = av_bsf_get_by_name("extract_extradata");
@@ -805,6 +827,9 @@ static int mediacodec_send(AVCodecContext *avctx,
             return ff_AMediaCodec_signalEndOfInputStream(codec);
         }
 
+        if (frame->pict_type == AV_PICTURE_TYPE_I)
+            mediacodec_request_sync_frame(avctx);
+
         if (frame->data[3])
             av_mediacodec_release_buffer((AVMediaCodecBuffer *)frame->data[3], 1);
         return 0;
@@ -825,6 +850,9 @@ static int mediacodec_send(AVCodecContext *avctx,
     if (frame) {
         input_buf = ff_AMediaCodec_getInputBuffer(codec, index, &input_size);
         copy_frame_to_buffer(avctx, frame, input_buf, input_size);
+
+        if (frame->pict_type == AV_PICTURE_TYPE_I)
+            mediacodec_request_sync_frame(avctx);
 
         pts = av_rescale_q(frame->pts, avctx->time_base, AV_TIME_BASE_Q);
     } else {
