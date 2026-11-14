@@ -1960,6 +1960,7 @@ typedef struct FFAMediaCodecNdk {
 
     // Available since API level 26.
     media_status_t (*setInputSurface)(AMediaCodec*, ANativeWindow *);
+    media_status_t (*setParameters)(AMediaCodec*, const AMediaFormat*);
     media_status_t (*signalEndOfInputStream)(AMediaCodec *);
     media_status_t (*setAsyncNotifyCallback)(AMediaCodec *,
             struct AMediaCodecOnAsyncNotifyCallback callback, void *userdata);
@@ -2199,6 +2200,7 @@ static inline FFAMediaCodec *ndk_codec_create(int method, const char *arg) {
     GET_SYMBOL(releaseName)
 
     GET_SYMBOL(setInputSurface)
+    GET_SYMBOL(setParameters)
     GET_SYMBOL(signalEndOfInputStream)
     GET_SYMBOL(setAsyncNotifyCallback)
 
@@ -2564,6 +2566,30 @@ static int mediacodec_ndk_setAsyncNotifyCallback(FFAMediaCodec *ctx,
     return 0;
 }
 
+static int mediacodec_ndk_setParameters(FFAMediaCodec *ctx,
+                                        const FFAMediaFormat *params_ctx)
+{
+    FFAMediaCodecNdk *codec = (FFAMediaCodecNdk *)ctx;
+    const FFAMediaFormatNdk *params = (const FFAMediaFormatNdk *)params_ctx;
+    media_status_t status;
+
+    if (!codec->setParameters)
+        return AVERROR(ENOSYS);
+
+    if (params_ctx->class != &amediaformat_ndk_class) {
+        av_log(codec, AV_LOG_ERROR, "invalid media format\n");
+        return AVERROR(EINVAL);
+    }
+
+    status = codec->setParameters(codec->impl, params->impl);
+    if (status != AMEDIA_OK) {
+        av_log(codec, AV_LOG_ERROR, "setParameters failed, %d\n", status);
+        return media_status_to_error(status);
+    }
+
+    return 0;
+}
+
 static const FFAMediaFormat media_format_ndk = {
     .class = &amediaformat_ndk_class,
 
@@ -2626,6 +2652,7 @@ static const FFAMediaCodec media_codec_ndk = {
     .cleanOutputBuffers = mediacodec_ndk_cleanOutputBuffers,
     .signalEndOfInputStream = mediacodec_ndk_signalEndOfInputStream,
     .setAsyncNotifyCallback = mediacodec_ndk_setAsyncNotifyCallback,
+    .setParameters = mediacodec_ndk_setParameters,
 };
 
 FFAMediaFormat *ff_AMediaFormat_new(int ndk)

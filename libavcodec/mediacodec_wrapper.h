@@ -240,6 +240,9 @@ struct FFAMediaCodec {
     int (*setAsyncNotifyCallback)(FFAMediaCodec *codec,
                                   const FFAMediaCodecOnAsyncNotifyCallback *callback,
                                   void *userdata);
+
+    // Introduced in Android API 26
+    int (*setParameters)(FFAMediaCodec *codec, const FFAMediaFormat *params);
 };
 
 static inline char *ff_AMediaCodec_getName(FFAMediaCodec *codec)
@@ -369,6 +372,14 @@ static inline int ff_AMediaCodec_setAsyncNotifyCallback(FFAMediaCodec *codec,
         void *userdata)
 {
     return codec->setAsyncNotifyCallback(codec, callback, userdata);
+}
+
+static inline int ff_AMediaCodec_setParameters(FFAMediaCodec *codec,
+                                               const FFAMediaFormat *params)
+{
+    if (!codec->setParameters)
+        return AVERROR(ENOSYS);
+    return codec->setParameters(codec, params);
 }
 
 int ff_Build_SDK_INT(AVCodecContext *avctx);
