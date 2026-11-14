@@ -114,37 +114,77 @@ static int zmbv_decode_xor_8(ZmbvContext *c, uint8_t *output,
 
             bw2 = ((c->width - x) > c->bw) ? c->bw : (c->width - x);
 
-            /* copy block - motion vectors out of bounds are used to zero blocks */
+            if (d && c->decomp_len - (src - c->decomp_buf) < bw2 * bh2)
+                return AVERROR_INVALIDDATA;
+
+            /* copy block - motion vectors out of bounds are used to zero
+             * blocks. Blocks with XOR data are combined with the copy in a
+             * single pass: a zero row or a pixel outside the reference frame
+             * XORed with the data equals the data itself. */
             out = output + x;
             tprev = prev + x + dx + dy * prev_linesize;
             mx = x + dx;
             my = y + dy;
             for (j = 0; j < bh2; j++) {
                 if (my + j < 0 || my + j >= c->height) {
-                    memset(out, 0, bw2);
+                    if (d) {
+                        memcpy(out, src, bw2);
+                        src += bw2;
+                    } else
+                        memset(out, 0, bw2);
                 } else if (mx >= 0 && mx + bw2 <= c->width){
-                    memcpy(out, tprev, bw2);
+                    /* fully within bounds: copy four pixels at a time when
+                     * all pointers are word-aligned */
+                    if (d) {
+                        if ((((uintptr_t)out | (uintptr_t)tprev | (uintptr_t)src) & 3) == 0) {
+                            const uint32_t *src32 = (const uint32_t *)src;
+                            const uint32_t *prev32 = (const uint32_t *)tprev;
+                            uint32_t *out32 = (uint32_t *)out;
+
+                            for (i = 0; i < (bw2 >> 2); i++)
+                                out32[i] = prev32[i] ^ src32[i];
+                            for (i = bw2 & ~3; i < bw2; i++)
+                                out[i] = tprev[i] ^ src[i];
+                            src += bw2;
+                        } else {
+                            for (i = 0; i < bw2; i++)
+                                out[i] = tprev[i] ^ src[i];
+                            src += bw2;
+                        }
+                    } else {
+                        if ((((uintptr_t)out | (uintptr_t)tprev) & 3) == 0) {
+                            const uint32_t *prev32 = (const uint32_t *)tprev;
+                            uint32_t *out32 = (uint32_t *)out;
+
+                            for (i = 0; i < (bw2 >> 2); i++)
+                                out32[i] = prev32[i];
+                            for (i = bw2 & ~3; i < bw2; i++)
+                                out[i] = tprev[i];
+                        } else {
+                            for (i = 0; i < bw2; i++)
+                                out[i] = tprev[i];
+                        }
+                    }
                 } else {
-                    for (i = 0; i < bw2; i++) {
-                        if (mx + i < 0 || mx + i >= c->width)
-                            out[i] = 0;
-                        else
-                            out[i] = tprev[i];
+                    /* partially outside the reference frame */
+                    if (d) {
+                        for (i = 0; i < bw2; i++) {
+                            out[i] = (mx + i >= 0 && mx + i < c->width) ?
+                                     tprev[i] : 0;
+                            out[i] ^= src[i];
+                        }
+                        src += bw2;
+                    } else {
+                        for (i = 0; i < bw2; i++) {
+                            if (mx + i < 0 || mx + i >= c->width)
+                                out[i] = 0;
+                            else
+                                out[i] = tprev[i];
+                        }
                     }
                 }
                 out += out_linesize;
                 tprev += prev_linesize;
-            }
-
-            if (d) { /* apply XOR'ed difference */
-                if (c->decomp_len - (src - c->decomp_buf) < bw2 * bh2)
-                    return AVERROR_INVALIDDATA;
-                out = output + x;
-                for (j = 0; j < bh2; j++) {
-                    for (i = 0; i < bw2; i++)
-                        out[i] ^= *src++;
-                    out += out_linesize;
-                }
             }
         }
         output += out_linesize * c->bh;
@@ -192,39 +232,84 @@ static int zmbv_decode_xor_16(ZmbvContext *c, uint8_t *output,
 
             bw2 = ((c->width - x) > c->bw) ? c->bw : (c->width - x);
 
-            /* copy block - motion vectors out of bounds are used to zero blocks */
+            if (d && c->decomp_len - (src - c->decomp_buf) < bw2 * bh2 * 2)
+                return AVERROR_INVALIDDATA;
+
+            /* copy block - motion vectors out of bounds are used to zero
+             * blocks. Blocks with XOR data are combined with the copy in a
+             * single pass: a zero row or a pixel outside the reference frame
+             * XORed with the data equals the data itself. */
             out = dst + x;
             tprev = ref + x + dx + dy * prev_step;
             mx = x + dx;
             my = y + dy;
             for (j = 0; j < bh2; j++) {
                 if (my + j < 0 || my + j >= c->height) {
-                    memset(out, 0, bw2 * 2);
+                    if (d) {
+                        memcpy(out, src, bw2 * 2);
+                        src += bw2 * 2;
+                    } else
+                        memset(out, 0, bw2 * 2);
                 } else if (mx >= 0 && mx + bw2 <= c->width){
-                    memcpy(out, tprev, sizeof(*out) * bw2);
+                    /* fully within bounds: copy two pixels at a time when
+                     * all pointers are word-aligned. The source of the copy
+                     * may start at an odd pixel, and the XOR data may start
+                     * at an odd pixel offset, so both are checked. */
+                    if (d) {
+                        if ((((uintptr_t)out | (uintptr_t)tprev | (uintptr_t)src) & 3) == 0) {
+                            const uint32_t *src32 = (const uint32_t *)src;
+                            const uint32_t *prev32 = (const uint32_t *)tprev;
+                            uint32_t *out32 = (uint32_t *)out;
+
+                            for (i = 0; i < (bw2 >> 1); i++)
+                                out32[i] = prev32[i] ^ src32[i];
+                            if (bw2 & 1)
+                                out[bw2 - 1] = tprev[bw2 - 1] ^
+                                               ((const uint16_t *)src)[bw2 - 1];
+                            src += bw2 * 2;
+                        } else {
+                            const uint16_t *src16 = (const uint16_t *)src;
+
+                            for (i = 0; i < bw2; i++)
+                                out[i] = tprev[i] ^ src16[i];
+                            src += bw2 * 2;
+                        }
+                    } else {
+                        if ((((uintptr_t)out | (uintptr_t)tprev) & 3) == 0) {
+                            const uint32_t *prev32 = (const uint32_t *)tprev;
+                            uint32_t *out32 = (uint32_t *)out;
+
+                            for (i = 0; i < (bw2 >> 1); i++)
+                                out32[i] = prev32[i];
+                            if (bw2 & 1)
+                                out[bw2 - 1] = tprev[bw2 - 1];
+                        } else {
+                            for (i = 0; i < bw2; i++)
+                                out[i] = tprev[i];
+                        }
+                    }
                 } else {
-                    for (i = 0; i < bw2; i++) {
-                        if (mx + i < 0 || mx + i >= c->width)
-                            out[i] = 0;
-                        else
-                            out[i] = tprev[i];
+                    /* partially outside the reference frame */
+                    if (d) {
+                        const uint16_t *src16 = (const uint16_t *)src;
+
+                        for (i = 0; i < bw2; i++) {
+                            out[i] = (mx + i >= 0 && mx + i < c->width) ?
+                                     tprev[i] : 0;
+                            out[i] ^= src16[i];
+                        }
+                        src += bw2 * 2;
+                    } else {
+                        for (i = 0; i < bw2; i++) {
+                            if (mx + i < 0 || mx + i >= c->width)
+                                out[i] = 0;
+                            else
+                                out[i] = tprev[i];
+                        }
                     }
                 }
                 out += out_step;
                 tprev += prev_step;
-            }
-
-            if (d) { /* apply XOR'ed difference */
-                if (c->decomp_len - (src - c->decomp_buf) < bw2 * bh2 * 2)
-                    return AVERROR_INVALIDDATA;
-                out = dst + x;
-                for (j = 0; j < bh2; j++) {
-                    for (i = 0; i < bw2; i++) {
-                        out[i] ^= *((uint16_t*)src);
-                        src += 2;
-                    }
-                    out += out_step;
-                }
             }
         }
         dst += out_step * c->bh;
@@ -358,39 +443,59 @@ static int zmbv_decode_xor_32(ZmbvContext *c, uint8_t *output,
 
             bw2 = ((c->width - x) > c->bw) ? c->bw : (c->width - x);
 
-            /* copy block - motion vectors out of bounds are used to zero blocks */
+            if (d && c->decomp_len - (src - c->decomp_buf) < bw2 * bh2 * 4)
+                return AVERROR_INVALIDDATA;
+
+            /* copy block - motion vectors out of bounds are used to zero
+             * blocks. Blocks with XOR data are combined with the copy in a
+             * single pass: a zero row or a pixel outside the reference frame
+             * XORed with the data equals the data itself. */
             out = dst + x;
             tprev = ref + x + dx + dy * prev_step;
             mx = x + dx;
             my = y + dy;
             for (j = 0; j < bh2; j++) {
                 if (my + j < 0 || my + j >= c->height) {
-                    memset(out, 0, bw2 * 4);
+                    if (d) {
+                        memcpy(out, src, bw2 * 4);
+                        src += bw2 * 4;
+                    } else
+                        memset(out, 0, bw2 * 4);
                 } else if (mx >= 0 && mx + bw2 <= c->width){
-                    memcpy(out, tprev, sizeof(*out) * bw2);
-                } else {
-                    for (i = 0; i < bw2; i++) {
-                        if (mx + i < 0 || mx + i >= c->width)
-                            out[i] = 0;
-                        else
+                    /* fully within bounds. out and tprev are built up in
+                     * 4-byte units from aligned frame buffers, and src only
+                     * ever advances in 4-byte steps, so all accesses are
+                     * word-aligned. */
+                    if (d) {
+                        const uint32_t *src32 = (const uint32_t *)src;
+
+                        for (i = 0; i < bw2; i++)
+                            out[i] = tprev[i] ^ src32[i];
+                        src += bw2 * 4;
+                    } else {
+                        for (i = 0; i < bw2; i++)
                             out[i] = tprev[i];
+                    }
+                } else {
+                    /* partially outside the reference frame */
+                    if (d) {
+                        for (i = 0; i < bw2; i++) {
+                            out[i] = (mx + i >= 0 && mx + i < c->width) ?
+                                     tprev[i] : 0;
+                            out[i] ^= ((const uint32_t *)src)[i];
+                        }
+                        src += bw2 * 4;
+                    } else {
+                        for (i = 0; i < bw2; i++) {
+                            if (mx + i < 0 || mx + i >= c->width)
+                                out[i] = 0;
+                            else
+                                out[i] = tprev[i];
+                        }
                     }
                 }
                 out += out_step;
                 tprev += prev_step;
-            }
-
-            if (d) { /* apply XOR'ed difference */
-                if (c->decomp_len - (src - c->decomp_buf) < bw2 * bh2 * 4)
-                    return AVERROR_INVALIDDATA;
-                out = dst + x;
-                for (j = 0; j < bh2; j++) {
-                    for (i = 0; i < bw2; i++) {
-                        out[i] ^= *((uint32_t *) src);
-                        src += 4;
-                    }
-                    out += out_step;
-                }
             }
         }
         dst += out_step * c->bh;
