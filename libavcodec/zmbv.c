@@ -686,6 +686,30 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
             return AVERROR_INVALIDDATA;
         if (!c->prev_frame->data[0])
             return AVERROR_INVALIDDATA;
+
+        /* An inter frame with an all-zero motion vector table and no
+         * palette delta copies every block from its reference position
+         * unchanged, so the frame equals the reference. Hand out the
+         * reference buffer itself instead of allocating and copying. */
+        if (!(c->flags & ZMBV_DELTAPAL)) {
+            const uint8_t *mvec = c->decomp_buf;
+            int i, n = c->bx * c->by * 2;
+
+            for (i = 0; i < n; i++)
+                if (mvec[i])
+                    break;
+            if (i == n) {
+                if ((ret = av_frame_ref(frame, c->prev_frame)) < 0)
+                    return ret;
+                if ((ret = ff_decode_frame_props(avctx, frame)) < 0)
+                    return ret;
+                frame->flags &= ~AV_FRAME_FLAG_KEY;
+                frame->pict_type = AV_PICTURE_TYPE_P;
+                *got_frame = 1;
+                return buf_size;
+            }
+        }
+
         if (c->decomp_len) {
             if ((ret = c->decode_xor(c, frame->data[0], frame->linesize[0],
                                      c->prev_frame->data[0],
