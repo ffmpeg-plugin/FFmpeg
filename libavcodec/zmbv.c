@@ -540,6 +540,7 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
     int len = buf_size;
     int hi_ver, lo_ver, ret;
     int expected_size;
+    int direct = 0;
 
     /* parse header */
     if (len < 1)
@@ -641,6 +642,14 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
     }
 
+    /* A keyframe without a palette prefix can be inflated straight into
+     * the output frame when the frame is packed, saving the copy from
+     * the scratch buffer. The frame has to be fetched first for that. */
+    if (c->flags & ZMBV_KEYFRAME) {
+        if ((ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0)
+            return ret;
+    }
+
     if (c->comp == 0) { // uncompressed data
         if (c->decomp_size < len) {
             av_log(avctx, AV_LOG_ERROR, "Buffer too small\n");
@@ -650,18 +659,51 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         c->decomp_len = len;
     } else { // ZLIB-compressed data
         z_stream *const zstream = &c->zstream.zstream;
+        int inflate_again = 0;
 
-        zstream->total_in  = zstream->total_out = 0;
-        zstream->next_in   = buf;
-        zstream->avail_in  = len;
-        zstream->next_out  = c->decomp_buf;
-        zstream->avail_out = c->decomp_size;
-        zret = inflate(zstream, Z_SYNC_FLUSH);
-        if (zret != Z_OK && zret != Z_STREAM_END) {
-            av_log(avctx, AV_LOG_ERROR, "inflate error %d\n", zret);
-            return AVERROR_INVALIDDATA;
+        if ((c->flags & ZMBV_KEYFRAME) && c->fmt != ZMBV_FMT_8BPP &&
+            frame->linesize[0] == c->stride) {
+            zstream->total_in  = zstream->total_out = 0;
+            zstream->next_in   = buf;
+            zstream->avail_in  = len;
+            zstream->next_out  = frame->data[0];
+            zstream->avail_out = expected_size;
+            zret = inflate(zstream, Z_SYNC_FLUSH);
+            if (zret != Z_OK && zret != Z_STREAM_END) {
+                av_log(avctx, AV_LOG_ERROR, "inflate error %d\n", zret);
+                return AVERROR_INVALIDDATA;
+            }
+            if (zstream->avail_out || !zstream->avail_in) {
+                /* complete or short: the size check below sorts the two
+                 * apart, and the frame already holds the pixels */
+                direct = 1;
+                c->decomp_len = zstream->total_out;
+            } else {
+                /* the payload may exceed the frame: redo it into the
+                 * scratch buffer so the size check can reject that */
+                inflate_again = 1;
+            }
         }
-        c->decomp_len = zstream->total_out;
+        if (!direct) {
+            if (inflate_again) {
+                zret = inflateReset(zstream);
+                if (zret != Z_OK) {
+                    av_log(avctx, AV_LOG_ERROR, "Inflate reset error: %d\n", zret);
+                    return AVERROR_UNKNOWN;
+                }
+            }
+            zstream->total_in  = zstream->total_out = 0;
+            zstream->next_in   = buf;
+            zstream->avail_in  = len;
+            zstream->next_out  = c->decomp_buf;
+            zstream->avail_out = c->decomp_size;
+            zret = inflate(zstream, Z_SYNC_FLUSH);
+            if (zret != Z_OK && zret != Z_STREAM_END) {
+                av_log(avctx, AV_LOG_ERROR, "inflate error %d\n", zret);
+                return AVERROR_INVALIDDATA;
+            }
+            c->decomp_len = zstream->total_out;
+        }
     }
     if (expected_size > c->decomp_len ||
         (c->flags & ZMBV_KEYFRAME) && expected_size < c->decomp_len) {
@@ -669,16 +711,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
     }
 
-    /* Decode straight into the output frame. The reference frame is kept
-     * alive by its own AVBufferRef, so the caller may unref its frame as
-     * soon as receive_frame() returns. */
-    if ((ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0)
-        return ret;
-
     if (c->flags & ZMBV_KEYFRAME) {
         frame->flags |= AV_FRAME_FLAG_KEY;
         frame->pict_type = AV_PICTURE_TYPE_I;
-        zmbv_decode_intra(c, frame->data[0], frame->linesize[0]);
+        if (!direct)
+            zmbv_decode_intra(c, frame->data[0], frame->linesize[0]);
     } else {
         frame->flags &= ~AV_FRAME_FLAG_KEY;
         frame->pict_type = AV_PICTURE_TYPE_P;
@@ -710,6 +747,11 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
             }
         }
 
+        /* Decode straight into the output frame. The reference frame is kept
+         * alive by its own AVBufferRef, so the caller may unref its frame as
+         * soon as receive_frame() returns. */
+        if ((ret = ff_get_buffer(avctx, frame, AV_GET_BUFFER_FLAG_REF)) < 0)
+            return ret;
         if (c->decomp_len) {
             if ((ret = c->decode_xor(c, frame->data[0], frame->linesize[0],
                                      c->prev_frame->data[0],
