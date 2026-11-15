@@ -133,37 +133,33 @@ static int zmbv_decode_xor_8(ZmbvContext *c, uint8_t *output,
                     } else
                         memset(out, 0, bw2);
                 } else if (mx >= 0 && mx + bw2 <= c->width){
-                    /* fully within bounds: copy four pixels at a time when
-                     * all pointers are word-aligned */
+                    /* fully within bounds */
                     if (d) {
                         if ((((uintptr_t)out | (uintptr_t)tprev | (uintptr_t)src) & 3) == 0) {
+                            /* copy four pixels at a time, XORing the
+                             * difference on the fly */
                             const uint32_t *src32 = (const uint32_t *)src;
                             const uint32_t *prev32 = (const uint32_t *)tprev;
                             uint32_t *out32 = (uint32_t *)out;
+                            int n = bw2 >> 2;
 
-                            for (i = 0; i < (bw2 >> 2); i++)
+                            for (i = 0; i + 3 < n; i += 4) {
+                                out32[i]     = prev32[i]     ^ src32[i];
+                                out32[i + 1] = prev32[i + 1] ^ src32[i + 1];
+                                out32[i + 2] = prev32[i + 2] ^ src32[i + 2];
+                                out32[i + 3] = prev32[i + 3] ^ src32[i + 3];
+                            }
+                            for (; i < n; i++)
                                 out32[i] = prev32[i] ^ src32[i];
                             for (i = bw2 & ~3; i < bw2; i++)
                                 out[i] = tprev[i] ^ src[i];
-                            src += bw2;
                         } else {
                             for (i = 0; i < bw2; i++)
                                 out[i] = tprev[i] ^ src[i];
-                            src += bw2;
                         }
+                        src += bw2;
                     } else {
-                        if ((((uintptr_t)out | (uintptr_t)tprev) & 3) == 0) {
-                            const uint32_t *prev32 = (const uint32_t *)tprev;
-                            uint32_t *out32 = (uint32_t *)out;
-
-                            for (i = 0; i < (bw2 >> 2); i++)
-                                out32[i] = prev32[i];
-                            for (i = bw2 & ~3; i < bw2; i++)
-                                out[i] = tprev[i];
-                        } else {
-                            for (i = 0; i < bw2; i++)
-                                out[i] = tprev[i];
-                        }
+                        memcpy(out, tprev, bw2);
                     }
                 } else {
                     /* partially outside the reference frame */
@@ -251,42 +247,39 @@ static int zmbv_decode_xor_16(ZmbvContext *c, uint8_t *output,
                     } else
                         memset(out, 0, bw2 * 2);
                 } else if (mx >= 0 && mx + bw2 <= c->width){
-                    /* fully within bounds: copy two pixels at a time when
-                     * all pointers are word-aligned. The source of the copy
-                     * may start at an odd pixel, and the XOR data may start
-                     * at an odd pixel offset, so both are checked. */
+                    /* fully within bounds */
                     if (d) {
                         if ((((uintptr_t)out | (uintptr_t)tprev | (uintptr_t)src) & 3) == 0) {
+                            /* copy four pixels at a time, XORing the
+                             * difference on the fly. The source of the copy
+                             * may start at an odd pixel, and the XOR data
+                             * may start at an odd pixel offset, so both are
+                             * checked for word alignment. */
                             const uint32_t *src32 = (const uint32_t *)src;
                             const uint32_t *prev32 = (const uint32_t *)tprev;
                             uint32_t *out32 = (uint32_t *)out;
+                            int n = bw2 >> 1;
 
-                            for (i = 0; i < (bw2 >> 1); i++)
+                            for (i = 0; i + 3 < n; i += 4) {
+                                out32[i]     = prev32[i]     ^ src32[i];
+                                out32[i + 1] = prev32[i + 1] ^ src32[i + 1];
+                                out32[i + 2] = prev32[i + 2] ^ src32[i + 2];
+                                out32[i + 3] = prev32[i + 3] ^ src32[i + 3];
+                            }
+                            for (; i < n; i++)
                                 out32[i] = prev32[i] ^ src32[i];
                             if (bw2 & 1)
                                 out[bw2 - 1] = tprev[bw2 - 1] ^
                                                ((const uint16_t *)src)[bw2 - 1];
-                            src += bw2 * 2;
                         } else {
                             const uint16_t *src16 = (const uint16_t *)src;
 
                             for (i = 0; i < bw2; i++)
                                 out[i] = tprev[i] ^ src16[i];
-                            src += bw2 * 2;
                         }
+                        src += bw2 * 2;
                     } else {
-                        if ((((uintptr_t)out | (uintptr_t)tprev) & 3) == 0) {
-                            const uint32_t *prev32 = (const uint32_t *)tprev;
-                            uint32_t *out32 = (uint32_t *)out;
-
-                            for (i = 0; i < (bw2 >> 1); i++)
-                                out32[i] = prev32[i];
-                            if (bw2 & 1)
-                                out[bw2 - 1] = tprev[bw2 - 1];
-                        } else {
-                            for (i = 0; i < bw2; i++)
-                                out[i] = tprev[i];
-                        }
+                        memcpy(out, tprev, bw2 * 2);
                     }
                 } else {
                     /* partially outside the reference frame */
@@ -469,12 +462,17 @@ static int zmbv_decode_xor_32(ZmbvContext *c, uint8_t *output,
                     if (d) {
                         const uint32_t *src32 = (const uint32_t *)src;
 
-                        for (i = 0; i < bw2; i++)
+                        for (i = 0; i + 3 < bw2; i += 4) {
+                            out[i]     = tprev[i]     ^ src32[i];
+                            out[i + 1] = tprev[i + 1] ^ src32[i + 1];
+                            out[i + 2] = tprev[i + 2] ^ src32[i + 2];
+                            out[i + 3] = tprev[i + 3] ^ src32[i + 3];
+                        }
+                        for (; i < bw2; i++)
                             out[i] = tprev[i] ^ src32[i];
                         src += bw2 * 4;
                     } else {
-                        for (i = 0; i < bw2; i++)
-                            out[i] = tprev[i];
+                        memcpy(out, tprev, bw2 * 4);
                     }
                 } else {
                     /* partially outside the reference frame */
