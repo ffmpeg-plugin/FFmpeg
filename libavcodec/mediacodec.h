@@ -26,9 +26,12 @@
 #include "libavcodec/avcodec.h"
 
 /**
- * This structure holds a reference to a android/view/Surface object that will
- * be used as output by the decoder.
+ * This structure holds a reference to an android/view/Surface object used as
+ * the output surface by MediaCodec decoders or the input surface by MediaCodec
+ * encoders.
  *
+ * New code should prefer AVMediaCodecDeviceContext with
+ * AVCodecContext.hw_device_ctx (see libavutil/hwcontext_mediacodec.h).
  */
 typedef struct AVMediaCodecContext {
 
@@ -40,28 +43,39 @@ typedef struct AVMediaCodecContext {
 } AVMediaCodecContext;
 
 /**
- * Allocate and initialize a MediaCodec context.
+ * Allocate a MediaCodec context.
  *
- * When decoding with MediaCodec is finished, the caller must free the
- * MediaCodec context with av_mediacodec_default_free.
+ * The returned context is owned by the caller. av_mediacodec_default_init()
+ * takes ownership of it only on success; on failure the caller still owns
+ * the context and must free it with av_free().
  *
- * @return a pointer to a newly allocated AVMediaCodecContext on success, NULL otherwise
+ * @return a pointer to a newly allocated AVMediaCodecContext on success,
+ * NULL otherwise
  */
 AVMediaCodecContext *av_mediacodec_alloc_context(void);
 
 /**
  * Convenience function that sets up the MediaCodec context.
  *
+ * On success, ctx is installed as avctx->hwaccel_context and must be
+ * released with av_mediacodec_default_free(). On failure, ctx is not
+ * installed and remains owned by the caller.
+ *
  * @param avctx codec context
- * @param ctx MediaCodec context to initialize
+ * @param ctx MediaCodec context allocated with av_mediacodec_alloc_context()
  * @param surface reference to an android/view/Surface
  * @return 0 on success, < 0 otherwise
  */
 int av_mediacodec_default_init(AVCodecContext *avctx, AVMediaCodecContext *ctx, void *surface);
 
 /**
- * This function must be called to free the MediaCodec context initialized with
- * av_mediacodec_default_init().
+ * Free the MediaCodec context installed by av_mediacodec_default_init().
+ *
+ * This function must be called before avcodec_free_context(), since
+ * libavcodec does not own avctx->hwaccel_context. Only use it for a context
+ * allocated with av_mediacodec_alloc_context() and initialized with
+ * av_mediacodec_default_init(). A context filled in by the caller and
+ * assigned to avctx->hwaccel_context directly must be freed by the caller.
  *
  * @param avctx codec context
  */
