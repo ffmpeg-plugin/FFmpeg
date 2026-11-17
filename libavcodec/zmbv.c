@@ -573,6 +573,34 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
         return AVERROR_INVALIDDATA;
     }
 
+    /* A payload that is only the motion vector table has no block data.
+     * If the vectors are all zero and there is no palette delta, the frame
+     * equals its reference, so output the reference instead of decoding.
+     */
+    if (!(c->flags & (ZMBV_KEYFRAME | ZMBV_DELTAPAL)) &&
+        c->decomp_len == expected_size) {
+        const uint8_t *mvec = c->decomp_buf;
+        int i, n = c->bx * c->by * 2;
+
+        for (i = 0; i < n; i++)
+            if (mvec[i])
+                break;
+        if (i == n) {
+            ret = av_frame_ref(frame, c->prev_frame);
+            if (ret < 0)
+                return ret;
+            av_frame_side_data_free(&frame->side_data, &frame->nb_side_data);
+            av_dict_free(&frame->metadata);
+            ret = ff_decode_frame_props(avctx, frame);
+            if (ret < 0)
+                return ret;
+            frame->flags &= ~(AV_FRAME_FLAG_KEY | AV_FRAME_FLAG_DISCARD);
+            frame->pict_type = AV_PICTURE_TYPE_P;
+            *got_frame = 1;
+            return buf_size;
+        }
+    }
+
     /* Decode directly into the output frame. It is kept as the reference
      * frame for the next P frame, hence the reference flag.
      */
